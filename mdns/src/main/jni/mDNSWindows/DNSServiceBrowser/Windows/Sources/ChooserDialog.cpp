@@ -1,90 +1,19 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 2002-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-    
-$Log: ChooserDialog.cpp,v $
-Revision 1.2  2004/07/13 21:24:26  rpantos
-Fix for <rdar://problem/3701120>.
-
-Revision 1.1  2004/06/18 04:04:36  rpantos
-Move up one level
-
-Revision 1.10  2004/04/23 01:19:41  bradley
-Changed TXT record new line delimiter from \n to \r\n so it works now that it is an edit text.
-
-Revision 1.9  2004/03/07 05:51:04  bradley
-Updated service type list table to include all service types from dns-sd.org as of 2004-03-06.
-Added separate Service Type and Service Description columns so both are show in the window.
-
-Revision 1.8  2004/01/30 02:56:32  bradley
-Updated to support full Unicode display. Added support for all services on www.dns-sd.org.
-
-Revision 1.7  2003/12/25 03:42:04  bradley
-Added login dialog to get username/password when going to FTP sites. Added more services.
-
-Revision 1.6  2003/10/31 12:18:30  bradley
-Added display of the resolved host name. Show separate TXT record entries on separate lines.
-
-Revision 1.5  2003/10/16 09:21:56  bradley
-Ignore non-IPv4 resolves until mDNS on Windows supports IPv6.
-
-Revision 1.4  2003/10/10 03:41:29  bradley
-Changed HTTP double-click handling to work with or without the path= prefix in the TXT record.
-
-Revision 1.3  2003/10/09 19:50:40  bradley
-Sort service type list by description.
-
-Revision 1.2  2003/10/09 19:41:29  bradley
-Changed quit handling to go through normal close path so dialog is freed on quit. Integrated changes
-from Andrew van der Stock for the addition of an _rfb._tcp service type for a VNC Remote Framebuffer
-Server for KDE support. Widened service type list to handle larger service type descriptions.
-
-Revision 1.1  2003/08/21 02:06:47  bradley
-Moved DNSServiceBrowser for non-Windows CE into Windows sub-folder.
-
-Revision 1.7  2003/08/20 06:45:56  bradley
-Updated for IP address changes in DNSServices. Added support for browsing for Xserve RAID.
-
-Revision 1.6  2003/08/12 19:56:28  cheshire
-Update to APSL 2.0
-
-Revision 1.5  2003/07/13 01:03:55  cheshire
-Diffs provided by Bob Bradley to provide provide proper display of Unicode names
-
-Revision 1.4  2003/07/02 21:20:06  cheshire
-<rdar://problem/3313413> Update copyright notices, etc., in source code comments
-
-Revision 1.3  2002/09/21 20:44:55  zarzycki
-Added APSL info
-
-Revision 1.2  2002/09/20 08:39:21  bradley
-Make sure each resolved item matches the selected service type to handle resolved that may have
-been queued up on the Windows Message Loop. Reduce column to fit when scrollbar is present.
-
-Revision 1.1  2002/09/20 06:12:52  bradley
-DNSServiceBrowser for Windows
-
-*/
+ */
 
 #include	<assert.h>
 #include	<stdio.h>
@@ -244,7 +173,6 @@ static const KnownServiceEntry		kKnownServiceTable[] =
 	{ "_printer._tcp.", 			"Printer (LPR)", 											"lpr://", 		false }, 
 	{ "_ptp._tcp.", 				"Picture Transfer (PTP)", 									"ptp://", 		false },
 	{ "_register._tcp", 			"DNS Service Discovery", 									"", 			false },
-	{ "_rendezvouspong._tcp",	 	"RendezvousPong", 											"", 			false },
 	{ "_rfb._tcp.", 				"Remote Frame Buffer",										"",				false },
 	{ "_riousbprint._tcp.", 		"Remote I/O USB Printer Protocol",							"",				false },
 	{ "_rtsp._tcp.", 				"Real Time Stream Control Protocol",						"",				false },
@@ -388,7 +316,7 @@ ChooserDialog::ChooserDialog( CWnd *inParent )
 	: CDialog( ChooserDialog::IDD, inParent)
 {
 	//{{AFX_DATA_INIT(ChooserDialog)
-		// NOTE: the ClassWizard will add member initialization here
+		// Note: the ClassWizard will add member initialization here
 	//}}AFX_DATA_INIT
 	
 	// Load menu accelerator table.

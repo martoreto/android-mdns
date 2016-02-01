@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DLL", "mDNSWindows\DLL\com.apple.dnssd.vcxproj", "{AB581101-18F0-46F6-B56A-83A6B1EA657E}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DLL", "mDNSWindows\DLL\dnssd.vcxproj", "{AB581101-18F0-46F6-B56A-83A6B1EA657E}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mDNSResponder", "mDNSWindows\SystemService\Service.vcxproj", "{C1D98254-BA27-4427-A3BE-A68CA2CC5F69}"
 EndProject

@@ -1,42 +1,18 @@
+# -*- tab-width: 4 -*-
+#
 # Copyright (c) 2002-2004 Apple Computer, Inc. All rights reserved.
 #
-# @APPLE_LICENSE_HEADER_START@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 # 
-# This file contains Original Code and/or Modifications of Original Code
-# as defined in and that are subject to the Apple Public Source License
-# Version 2.0 (the 'License'). You may not use this file except in
-# compliance with the License. Please obtain a copy of the License at
-# http://www.opensource.apple.com/apsl/ and read it before using this
-# file.
+#     http://www.apache.org/licenses/LICENSE-2.0
 # 
-# The Original Code and all software distributed under the License are
-# distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
-# EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
-# INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
-# Please see the License for the specific language governing rights and
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
 # limitations under the License.
-# 
-# @APPLE_LICENSE_HEADER_END@
-#
-# $Log: makefile,v $
-# Revision 1.4  2004/12/16 22:38:00  shersche
-# Compile DNSSDException.java first to avoid build errors, copy output to appropriate "buildroot" folder
-#
-# Revision 1.3  2004/11/23 08:13:07  shersche
-# Link to the iphlpapi.lib for GetAdaptersInfo
-#
-# Revision 1.2  2004/06/26 20:07:06  rpantos
-# Update to use WinVersRes.h
-#
-# Revision 1.1  2004/06/18 04:12:05  rpantos
-# Move up one level. Integration changes for Scott.
-#
-# Revision 1.2  2004/05/01 00:31:41  rpantos
-# Change line endings for CVS.
-#
-# Revision 1.1  2004/04/30 16:32:34  rpantos
-# First checked in.
 #
 # This Makefile builds a .jar file and accompanying JNI support library
 # containing the DNSSD implementation for Java and support classes.
@@ -58,7 +34,7 @@
 COREDIR = ..\..\mDNSCore
 SHAREDDIR = ..\..\mDNSShared
 
-JDK = \javasdk
+JDK = $(JAVA_HOME)
 
 CC = cl
 RC = rc
@@ -78,12 +54,14 @@ DEBUG=0
 CFLAGS_DEBUG = -Zi -DMDNS_DEBUGMSGS=2 
 OBJDIR = objects\debug
 BUILDDIR = build\debug
-LIBDIR = ..\DLL\Debug
+INSTALLDIR = root\"Program Files"\Bonjour
+LIBDIR = ..\DLL\Win32\Debug
 !else
 CFLAGS_DEBUG = -Os -DMDNS_DEBUGMSGS=0 
 OBJDIR = objects\prod
 BUILDDIR = build\prod
-LIBDIR = ..\DLL\Release
+INSTALLDIR = root\"Program Files"\Bonjour
+LIBDIR = ..\DLL\Win32\Release
 !endif
 
 CFLAGS = $(CFLAGS_COMMON) $(CFLAGS_DEBUG)
@@ -100,19 +78,18 @@ setup:
 	@if not exist $(OBJDIR)		mkdir $(OBJDIR)
 	@if not exist $(BUILDDIR)	mkdir $(BUILDDIR)
 
-!if DEFINED(DNSSD_BUILD_ROOT)
-!if $(DEBUG) == 1
 postbuild:
-	copy $(BUILDDIR)\dns_sd.jar $(DNSSD_BUILD_ROOT)\Debug\Root\"Program Files"\bin
-	copy $(BUILDDIR)\jdns_sd.dll $(DNSSD_BUILD_ROOT)\Debug\Root\"Program Files"\bin
-!else
-postbuild:
-	copy $(BUILDDIR)\dns_sd.jar $(DNSSD_BUILD_ROOT)\Release\Root\"Program Files"\bin
-	copy $(BUILDDIR)\jdns_sd.dll $(DNSSD_BUILD_ROOT)\Release\Root\"Program Files"\bin
-!endif
-!else
-postbuild:
-!endif
+	@if not "%RC_XBS%"=="YES" GOTO CONT
+	@if not exist "$(DSTROOT)\WINDOWS\system32\Win32"	mkdir "$(DSTROOT)\WINDOWS\system32\Win32"
+	@if not exist "$(DSTROOT)\Program Files\Bonjour\Win32"	mkdir "$(DSTROOT)\Program Files\Bonjour\Win32"
+	@copy $(BUILDDIR)\jdns_sd.dll "$(DSTROOT)\WINDOWS\system32\Win32"
+	@copy $(BUILDDIR)\dns_sd.jar  "$(DSTROOT)\Program Files\Bonjour\Win32"
+	@:CONT
+	@if not exist root					mkdir root
+	@if not exist root\"Program Files"	mkdir root\"Program Files"
+	@if not exist $(INSTALLDIR)			mkdir $(INSTALLDIR)
+	copy $(BUILDDIR)\dns_sd.jar $(INSTALLDIR)
+	copy $(BUILDDIR)\jdns_sd.dll $(INSTALLDIR)
 
 # clean removes targets and objects
 clean:
@@ -132,10 +109,12 @@ JARCONTENTS =	$(OBJDIR)\com\apple\dnssd\DNSSDService.class \
 				$(OBJDIR)\com\apple\dnssd\DNSRecord.class \
 				$(OBJDIR)\com\apple\dnssd\TXTRecord.class \
 				$(OBJDIR)\com\apple\dnssd\DNSSDRegistration.class \
+				$(OBJDIR)\com\apple\dnssd\DNSSDRecordRegistrar.class \
 				$(OBJDIR)\com\apple\dnssd\BaseListener.class \
 				$(OBJDIR)\com\apple\dnssd\BrowseListener.class \
 				$(OBJDIR)\com\apple\dnssd\ResolveListener.class \
 				$(OBJDIR)\com\apple\dnssd\RegisterListener.class \
+				$(OBJDIR)\com\apple\dnssd\RegisterRecordListener.class \
 				$(OBJDIR)\com\apple\dnssd\QueryListener.class \
 				$(OBJDIR)\com\apple\dnssd\DomainListener.class \
 				$(OBJDIR)\com\apple\dnssd\DNSSD.class
@@ -145,7 +124,7 @@ $(BUILDDIR)\dns_sd.jar: $(JARCONTENTS)
 
 $(BUILDDIR)\jdns_sd.dll: $(JAVASRC)\JNISupport.c $(OBJDIR)\DNSSD.java.h $(OBJDIR)\jdns_sd.RES
 	$(CC) -Fe$@ $(JAVASRC)\JNISupport.c $(CFLAGS) -I$(OBJDIR) \
-	$(LIBDIR)\DNSSD.lib $(JDK)\lib\jvm.lib ws2_32.lib iphlpapi.lib $(OBJDIR)\jdns_sd.RES
+	$(LIBDIR)\DNSSD.lib $(JDK)\lib\jvm.lib ws2_32.lib iphlpapi.lib $(OBJDIR)\jdns_sd.RES /link /NXCOMPAT /DYNAMICBASE /SAFESEH
 
 .SUFFIXES : .java
 {$(JAVASRC)}.java{$(OBJDIR)\com\apple\dnssd}.class:	

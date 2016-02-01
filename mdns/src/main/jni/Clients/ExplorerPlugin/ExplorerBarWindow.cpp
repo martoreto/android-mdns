@@ -1,96 +1,19 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 2003-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-    
-$Log: ExplorerBarWindow.cpp,v $
-Revision 1.15  2005/01/27 22:38:27  shersche
-add About item to tree list
-
-Revision 1.14  2005/01/25 17:55:39  shersche
-<rdar://problem/3911084> Get bitmaps from non-localizable resource module
-Bug #: 3911084
-
-Revision 1.13  2005/01/06 21:13:09  shersche
-<rdar://problem/3796779> Handle kDNSServiceErr_Firewall return codes
-Bug #: 3796779
-
-Revision 1.12  2004/10/26 00:56:03  cheshire
-Use "#if 0" instead of commenting out code
-
-Revision 1.11  2004/10/18 23:49:17  shersche
-<rdar://problem/3841564> Remove trailing dot from hostname, because some flavors of Windows have difficulty parsing hostnames with a trailing dot.
-Bug #: 3841564
-
-Revision 1.10  2004/09/02 02:18:58  cheshire
-Minor textual cleanup to improve readability
-
-Revision 1.9  2004/09/02 02:11:56  cheshire
-<rdar://problem/3783611> Fix incorrect testing of MoreComing flag
-
-Revision 1.8  2004/07/26 05:47:31  shersche
-use TXTRecord APIs, fix bug in locating service to be removed
-
-Revision 1.7  2004/07/22 16:08:20  shersche
-clean up debug print statements, re-enable code inadvertently commented out
-
-Revision 1.6  2004/07/22 05:27:20  shersche
-<rdar://problem/3735827> Check to make sure error isn't WSAEWOULDBLOCK when canceling browse
-Bug #: 3735827
-
-Revision 1.5  2004/07/20 06:49:18  shersche
-clean up socket handling code
-
-Revision 1.4  2004/07/13 21:24:21  rpantos
-Fix for <rdar://problem/3701120>.
-
-Revision 1.3  2004/06/27 14:59:59  shersche
-reference count service info to handle multi-homed hosts
-
-Revision 1.2  2004/06/23 16:09:34  shersche
-Add the resolve DNSServiceRef to list of extant refs.  This fixes the "doesn't resolve when double clicking" problem
-
-Submitted by: Scott Herscher
-
-Revision 1.1  2004/06/18 04:34:59  rpantos
-Move to Clients from mDNSWindows
-
-Revision 1.5  2004/04/15 01:00:05  bradley
-Removed support for automatically querying for A/AAAA records when resolving names. Platforms
-without .local name resolving support will need to manually query for A/AAAA records as needed.
-
-Revision 1.4  2004/04/09 21:03:15  bradley
-Changed port numbers to use network byte order for consistency with other platforms.
-
-Revision 1.3  2004/04/08 09:43:43  bradley
-Changed callback calling conventions to __stdcall so they can be used with C# delegates.
-
-Revision 1.2  2004/02/21 04:36:19  bradley
-Enable dot local name lookups now that the NSP is being installed.
-
-Revision 1.1  2004/01/30 03:01:56  bradley
-Explorer Plugin to browse for DNS-SD advertised Web and FTP servers from within Internet Explorer.
-
-*/
+ */
 
 #include	"StdAfx.h"
 
@@ -133,6 +56,10 @@ static char THIS_FILE[] = __FILE__;
 // TXT records
 
 #define	kTXTRecordKeyPath				"path"
+
+// IE Icon resource
+
+#define kIEIconResource					32529
 
 
 #if 0
@@ -196,6 +123,7 @@ int	ExplorerBarWindow::OnCreate( LPCREATESTRUCT inCreateStruct )
 {
 	AFX_MANAGE_STATE( AfxGetStaticModuleState() );
 	
+	HINSTANCE		module = NULL;
 	OSStatus		err;
 	CRect			rect;
 	CBitmap			bitmap;
@@ -205,14 +133,14 @@ int	ExplorerBarWindow::OnCreate( LPCREATESTRUCT inCreateStruct )
 	require_noerr( err, exit );
 	
 	GetClientRect( rect );
-	mTree.Create( WS_TABSTOP | WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_LINESATROOT | TVS_HASLINES | TVS_NOHSCROLL , rect, this, 
+	mTree.Create( WS_TABSTOP | WS_VISIBLE | WS_CHILD | TVS_HASBUTTONS | TVS_LINESATROOT | TVS_NOHSCROLL , rect, this, 
 		IDC_EXPLORER_TREE );
+	
+	ServiceHandlerEntry *		e;
 	
 	s.LoadString( IDS_ABOUT );
 	m_about = mTree.InsertItem( s, 0, 0 );
 
-	ServiceHandlerEntry *		e;
-	
 	// Web Site Handler
 	
 	e = new ServiceHandlerEntry;
@@ -220,59 +148,52 @@ int	ExplorerBarWindow::OnCreate( LPCREATESTRUCT inCreateStruct )
 	e->type				= "_http._tcp";
 	e->urlScheme		= "http://";
 	e->ref				= NULL;
-	e->treeItem			= NULL;
-	e->treeFirst		= true;
 	e->obj				= this;
 	e->needsLogin		= false;
 	mServiceHandlers.Add( e );
-	
-	s.LoadString( IDS_WEB_SITES );
-	e->treeItem = mTree.InsertItem( s, 1, 1 );
-	mTree.Expand( e->treeItem, TVE_EXPAND );
-	
+
 	err = DNSServiceBrowse( &e->ref, 0, 0, e->type, NULL, BrowseCallBack, e );
 	require_noerr( err, exit );
 
 	err = WSAAsyncSelect((SOCKET) DNSServiceRefSockFD(e->ref), m_hWnd, WM_PRIVATE_SERVICE_EVENT, FD_READ|FD_CLOSE);
 	require_noerr( err, exit );
 
-	m_serviceRefs.push_back(e->ref); 
+	m_serviceRefs.push_back(e->ref);
 
-	// FTP Site Handler
-	
+#if defined( _BROWSE_FOR_HTTPS_ )
 	e = new ServiceHandlerEntry;
 	check( e );
-	e->type				= "_ftp._tcp";
-	e->urlScheme		= "ftp://";
+	e->type				= "_https._tcp";
+	e->urlScheme		= "https://";
 	e->ref				= NULL;
-	e->treeItem			= NULL;
-	e->treeFirst		= true;
 	e->obj				= this;
-	e->needsLogin		= true;
+	e->needsLogin		= false;
 	mServiceHandlers.Add( e );
-	
-	s.LoadString( IDS_FTP_SITES );
-	e->treeItem = mTree.InsertItem( s, 1, 1 );
-	mTree.Expand( e->treeItem, TVE_EXPAND );
-	
+
 	err = DNSServiceBrowse( &e->ref, 0, 0, e->type, NULL, BrowseCallBack, e );
 	require_noerr( err, exit );
 
 	err = WSAAsyncSelect((SOCKET) DNSServiceRefSockFD(e->ref), m_hWnd, WM_PRIVATE_SERVICE_EVENT, FD_READ|FD_CLOSE);
 	require_noerr( err, exit );
 
-	m_serviceRefs.push_back(e->ref); 
+	m_serviceRefs.push_back(e->ref);
+#endif
+	
+	m_imageList.Create( 16, 16, ILC_MASK | ILC_COLOR16, 2, 0);
 
-	m_imageList.Create( 16, 16, ILC_COLORDDB, 2, 0);
-	bitmap.Attach( ::LoadBitmap( GetNonLocalizedResources(), MAKEINTRESOURCE( IDB_GLOBE ) ) );
-	m_imageList.Add( &bitmap, (CBitmap*) NULL );
-	bitmap.Detach();
 	bitmap.Attach( ::LoadBitmap( GetNonLocalizedResources(), MAKEINTRESOURCE( IDB_LOGO ) ) );
 	m_imageList.Add( &bitmap, (CBitmap*) NULL );
+	bitmap.Detach();
 
 	mTree.SetImageList(&m_imageList, TVSIL_NORMAL);
 	
 exit:
+
+	if ( module )
+	{
+		FreeLibrary( module );
+		module = NULL;
+	}
 
 	// Cannot talk to the mDNSResponder service. Show the error message and exit (with kNoErr so they can see it).
 	if ( err )
@@ -387,7 +308,7 @@ exit:
 //	OnServiceEvent
 //===========================================================================================================================
 
-LONG
+LRESULT
 ExplorerBarWindow::OnServiceEvent(WPARAM inWParam, LPARAM inLParam)
 {
 	if (WSAGETSELECTERROR(inLParam) && !(HIWORD(inLParam)))
@@ -478,13 +399,13 @@ void DNSSD_API
 		err = UTF8StringToStringObject( inName, service->displayName );
 		check_noerr( err );
 
-		service->name = strdup( inName );
+		service->name = _strdup( inName );
 		require_action( service->name, exit, err = kNoMemoryErr );
 		
-		service->type = strdup( inType );
+		service->type = _strdup( inType );
 		require_action( service->type, exit, err = kNoMemoryErr );
 		
-		service->domain = strdup( inDomain );
+		service->domain = _strdup( inDomain );
 		require_action( service->domain, exit, err = kNoMemoryErr );
 		
 		service->ifi 		= inInterfaceIndex;
@@ -551,18 +472,10 @@ LONG	ExplorerBarWindow::OnServiceAdd( ServiceInfo * service )
 		
 		// Insert the new item in sorted order.
 		
-		afterItem = ( index > 0 ) ? handler->array[ index - 1 ]->item : TVI_FIRST;
+		afterItem = ( index > 0 ) ? handler->array[ index - 1 ]->item : m_about;
 		handler->array.InsertAt( index, service );
-		service->item = mTree.InsertItem( service->displayName, 1, 1, handler->treeItem, afterItem );
+		service->item = mTree.InsertItem( service->displayName, 0, 0, NULL, afterItem );
 		mTree.SetItemData( service->item, (DWORD_PTR) service );
-		
-		// Make sure the item is visible if this is the first time a service was added.
-	
-		if( handler->treeFirst )
-		{
-			handler->treeFirst = false;
-			mTree.EnsureVisible( service->item );
-		}
 	}
 	return( 0 );
 }

@@ -15,24 +15,23 @@
  * limitations under the License.
  */
 
-package com.apple.dnssd;
 
-/**
- * A listener that receives results from
- * {@link DNSSDRecordRegistrar#registerRecord}.
- */
+package	com.apple.dnssd;
 
-public interface RegisterRecordListener extends BaseListener {
-	/**
-	 * Called when a record registration succeeds.
-	 * <P>
-	 * 
-	 * @param record
-	 *            A {@link DNSRecord}.
-	 *            <P>
-	 * @param flags
-	 *            Currently ignored, reserved for future use.
-	 *            <P>
-	 */
-	void recordRegistered(DNSRecord record, int flags);
+
+/**	A listener that receives results from {@link DNSSDRecordRegistrar#registerRecord}. */
+
+public interface RegisterRecordListener extends BaseListener
+{
+	/** Called when a record registration succeeds.<P> 
+
+		@param	record
+					A {@link DNSRecord}. 
+		<P>
+		@param	flags
+					Currently ignored, reserved for future use.
+		<P>
+	*/
+	void	recordRegistered( DNSRecord record, int flags);
 }
+

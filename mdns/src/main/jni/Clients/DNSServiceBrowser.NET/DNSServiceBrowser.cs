@@ -1,47 +1,19 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 1997-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-    
-$Log: DNSServiceBrowser.cs,v $
-Revision 1.5  2004/09/21 16:26:58  shersche
-Check to make sure browse list selected item is not null before resolving
-Submitted by: prepin@gmail.com
-
-Revision 1.4  2004/09/13 19:38:17  shersche
-Changed code to reflect namespace and type changes to dnssd.NET library
-
-Revision 1.3  2004/09/11 00:38:14  shersche
-DNSService APIs now assume port in host format. Check for null text record in resolve callback.
-
-Revision 1.2  2004/07/22 23:15:25  shersche
-Fix service names for teleport, tftp, and bootps
-
-Revision 1.1  2004/07/19 07:54:24  shersche
-Initial revision
-
-
-
-*/
+ */
 
 using System;
 using System.Drawing;
@@ -50,7 +22,7 @@ using System.ComponentModel;
 using System.Windows.Forms;
 using System.Data;
 using System.Text;
-using Apple.DNSSD;
+using Bonjour;
 
 namespace DNSServiceBrowser_NET
 {
@@ -61,24 +33,15 @@ namespace DNSServiceBrowser_NET
 	{
 		private System.Windows.Forms.ComboBox typeBox;
 		private System.Windows.Forms.ListBox browseList;
-		private ServiceRef browser = null;
-		private ServiceRef resolver = null;
+        private Bonjour.DNSSDEventManager   eventManager = null;
+        private Bonjour.DNSSDService        service = null;
+		private Bonjour.DNSSDService        browser = null;
+		private Bonjour.DNSSDService        resolver = null;
 		/// <summary>
 		/// Required designer variable.
 		/// </summary>
 		private System.ComponentModel.Container components = null;
 
-
-		//
-		// These delegates are invoked as a result of DNSService
-		// operation.
-		//
-		delegate void AddServiceCallback(BrowseData data);
-		delegate void RemoveServiceCallback(BrowseData data);
-		delegate void ResolveServiceCallback(ResolveData data);
-
-		AddServiceCallback		addServiceCallback;
-		RemoveServiceCallback	removeServiceCallback;
 		private System.Windows.Forms.Label label1;
 		private System.Windows.Forms.Label label2;
 		private System.Windows.Forms.Label label3;
@@ -90,7 +53,6 @@ namespace DNSServiceBrowser_NET
 		private System.Windows.Forms.TextBox portField;
 		private System.Windows.Forms.Label label5;
 		private System.Windows.Forms.ListBox serviceTextField;
-		ResolveServiceCallback	resolveServiceCallback;
 
 		public Form1()
 		{
@@ -99,17 +61,30 @@ namespace DNSServiceBrowser_NET
 			//
 			InitializeComponent();
 
-			addServiceCallback		= new AddServiceCallback(OnAddService);
-			removeServiceCallback	= new RemoveServiceCallback(OnRemoveService);
-			resolveServiceCallback	= new ResolveServiceCallback(OnResolveService);
-
 			this.Load += new System.EventHandler(this.Form1_Load);
+
+			//
+			// Create the DNSSDEventManager. You can then associate event handlers
+			// with the instance that will be invoked when the event occurs
+			//
+			// In this example, we're associating ServiceFound, ServiceLost,
+			// ServiceResolved, and OperationFailed event handlers with the
+			// event manager instance.
+			//
+            eventManager                    =  new DNSSDEventManager();
+            eventManager.ServiceFound       += new _IDNSSDEvents_ServiceFoundEventHandler(this.ServiceFound);
+            eventManager.ServiceLost        += new _IDNSSDEvents_ServiceLostEventHandler(this.ServiceLost);
+            eventManager.ServiceResolved    += new _IDNSSDEvents_ServiceResolvedEventHandler(this.ServiceResolved);
+            eventManager.OperationFailed    += new _IDNSSDEvents_OperationFailedEventHandler(this.OperationFailed);
+            
+            service = new DNSSDService();
 		}
 
 		private void Form1_Load(object sender, EventArgs e) 
 		{
-			typeBox.SelectedItem = "_spike._tcp";
+			typeBox.SelectedItem = "_http._tcp";
 		}
+
 
 		/// <summary>
 		/// Clean up any resources being used.
@@ -118,15 +93,33 @@ namespace DNSServiceBrowser_NET
 		{
 			if( disposing )
 			{
-				if (components != null) 
-				{
-					components.Dispose();
-				}
+                if (components != null)
+                {
+                    components.Dispose();
+                }
 
-				if (browser != null)
-				{
-					browser.Dispose();
-				}
+				// 
+				// Clean up
+				//
+                if (resolver != null)
+                {
+                    resolver.Stop();
+                }
+
+                if (browser != null)
+                {
+                    browser.Stop();
+                }
+
+                if (service != null)
+                {
+                    service.Stop();
+                }
+
+                eventManager.ServiceFound    -= new _IDNSSDEvents_ServiceFoundEventHandler(this.ServiceFound);
+                eventManager.ServiceLost     -= new _IDNSSDEvents_ServiceLostEventHandler(this.ServiceLost);
+                eventManager.ServiceResolved -= new _IDNSSDEvents_ServiceResolvedEventHandler(this.ServiceResolved);
+                eventManager.OperationFailed -= new _IDNSSDEvents_OperationFailedEventHandler(this.OperationFailed);
 			}
 			base.Dispose( disposing );
 		}
@@ -267,7 +260,6 @@ namespace DNSServiceBrowser_NET
 				"_raop._tcp",
 				"_rce._tcp",
 				"_realplayfavs._tcp",
-				"_rendezvouspong._tcp",
 				"_riousbprint._tcp",
 				"_rfb._tcp",
 				"_rtsp._tcp",
@@ -464,10 +456,11 @@ namespace DNSServiceBrowser_NET
 		//
 		public class BrowseData
 		{
-			public int		InterfaceIndex;
+			public uint		InterfaceIndex;
 			public String	Name;
 			public String	Type;
 			public String	Domain;
+            public int      Refs;
 
 			public override String
 			ToString()
@@ -482,16 +475,7 @@ namespace DNSServiceBrowser_NET
 
 				if (other != null)
 				{
-					if ((object) this == other)
-					{
-						result = true;
-					}
-					else if (other is BrowseData)
-					{
-						BrowseData otherBrowseData = (BrowseData) other;
-
-						result = (this.Name == otherBrowseData.Name);
-					}
+					result = (this.Name == other.ToString());
 				}
 
 				return result;
@@ -513,11 +497,11 @@ namespace DNSServiceBrowser_NET
 		//
 		public class ResolveData
 		{
-			public int		InterfaceIndex;
-			public String	FullName;
-			public String	HostName;
-			public int		Port;
-			public Byte[]	TxtRecord;
+			public uint		    InterfaceIndex;
+			public String	    FullName;
+			public String	    HostName;
+			public int		    Port;
+			public TXTRecord	TxtRecord;
 
 			public override String
 				ToString()
@@ -542,29 +526,34 @@ namespace DNSServiceBrowser_NET
 			portField.Text	= resolveData.Port.ToString();
 
 			serviceTextField.Items.Clear();
-		
-			if (resolveData.TxtRecord != null)
-			{
-				for (int idx = 0; idx < TextRecord.GetCount(resolveData.TxtRecord); idx++)
-				{
-					String	key;
-					Byte[]	bytes;
-				
-					bytes	= TextRecord.GetItemAtIndex(resolveData.TxtRecord, idx, out key);
+            
+			//
+			// When we print the text record, we're going to assume that every value
+			// is a string.
+			//
+            if (resolveData.TxtRecord != null)
+            {
+                for (uint idx = 0; idx < resolveData.TxtRecord.GetCount(); idx++)
+                {
+                    String key;
+                    Byte[] bytes;
 
-					if (key.Length > 0)
-					{
-						String	val = "";
+                    key = resolveData.TxtRecord.GetKeyAtIndex(idx);
+                    bytes = (Byte[])resolveData.TxtRecord.GetValueAtIndex(idx);
 
-						if (bytes != null)
-						{
-							val = Encoding.ASCII.GetString(bytes, 0, bytes.Length);
-						}
+                    if (key.Length > 0)
+                    {
+                        String val = "";
 
-						serviceTextField.Items.Add(key + "=" + val);
-					}
-				}
-			}
+                        if (bytes != null)
+                        {
+                            val = Encoding.ASCII.GetString(bytes, 0, bytes.Length);
+                        }
+
+                        serviceTextField.Items.Add(key + "=" + val);
+                    }
+                }
+            }
 		}
 
 		//
@@ -574,9 +563,12 @@ namespace DNSServiceBrowser_NET
 		{
 			browseList.Items.Clear();
 
+			//
+			// Stop the current browse operation
+			//
 			if (browser != null)
 			{
-				browser.Dispose();
+				browser.Stop();
 			}
 
 			nameField.Text = "";
@@ -588,7 +580,10 @@ namespace DNSServiceBrowser_NET
 
 			try
 			{
-				browser = DNSService.Browse(0, 0, typeBox.SelectedItem.ToString(), null, new DNSService.BrowseReply(OnBrowseReply));
+				//
+				// Selecting a service type will start a new browse operation.
+				//
+				browser = service.Browse( 0, 0, typeBox.SelectedItem.ToString(), null, eventManager );
 			}
 			catch
 			{
@@ -601,7 +596,8 @@ namespace DNSServiceBrowser_NET
 		{
 			if (resolver != null)
 			{
-				resolver.Dispose();
+				resolver.Stop();
+                resolver = null;
 			}
 
             if (browseList.SelectedItem != null)
@@ -610,7 +606,11 @@ namespace DNSServiceBrowser_NET
                 {
                     BrowseData data = (BrowseData) browseList.SelectedItem;
 
-                    resolver = DNSService.Resolve(0, 0, data.Name, data.Type, data.Domain, new DNSService.ResolveReply(OnResolveReply));
+					//
+					// Clicking on a service instance results in starting a resolve operation
+					// that will call us back with information about the service
+					//
+                    resolver = service.Resolve(0, data.InterfaceIndex, data.Name, data.Type, data.Domain, eventManager);
                 }
                 catch
                 {
@@ -621,125 +621,114 @@ namespace DNSServiceBrowser_NET
 		}
 
 		//
-		// OnAddService
+		// ServiceFound
 		//
-		// This method is "Invoked" by OnBrowseReply.  This call
-		// executes in the context of the main thread
+		// This call is invoked by the DNSService core.  We create
+        // a BrowseData object and invoked the appropriate method
+        // in the GUI thread so we can update the UI
 		//
-		private void OnAddService
-								(
-								BrowseData	data
-								)
-		{
-			browseList.Items.Add(data);
-			browseList.Invalidate();
-		}
+        public void ServiceFound
+                        (
+                        DNSSDService sref,
+                        DNSSDFlags flags,
+                        uint ifIndex,
+                        String serviceName,
+                        String regType,
+                        String domain
+                        )
+        {
+            int index = browseList.Items.IndexOf(serviceName);
 
-		//
-		// OnRemoveService
-		//
-		// This method is "Invoked" by OnBrowseReply.  This call
-		// executes in the context of the main thread
-		//
-		private void OnRemoveService
-								(
-								BrowseData	data
-								)
-		{
-			browseList.Items.Remove(data);
-			browseList.Invalidate();
-		}
+			//
+			// Check to see if we've seen this service before. If the machine has multiple
+			// interfaces, we could potentially get called back multiple times for the
+			// same service. Implementing a simple reference counting scheme will address
+			// the problem of the same service showing up more than once in the browse list.
+			//
+            if (index == -1)
+            {
+                BrowseData data = new BrowseData();
 
-		//
-		// OnResolveService
-		//
-		// This method is "Invoked" by OnResolveReply.  This call
-		// executes in the context of the main thread
-		//
-		private void OnResolveService
-								(
-								ResolveData	data
-								)
+                data.InterfaceIndex = ifIndex;
+                data.Name = serviceName;
+                data.Type = regType;
+                data.Domain = domain;
+                data.Refs = 1;
+
+                browseList.Items.Add(data);
+                browseList.Invalidate();
+            }
+            else
+            {
+                BrowseData data = (BrowseData) browseList.Items[index];
+                data.Refs++;
+            }
+        }
+
+        public void ServiceLost
+                        (
+                        DNSSDService sref,
+                        DNSSDFlags flags,
+                        uint ifIndex,
+                        String serviceName,
+                        String regType,
+                        String domain
+                        )
+        {
+            int index = browseList.Items.IndexOf(serviceName);
+
+			//
+			// See above comment in ServiceFound about reference counting
+			//
+            if (index != -1)
+            {
+                BrowseData data = (BrowseData) browseList.Items[index];
+
+                data.Refs--;
+
+                if (data.Refs == 0)
+                {
+                    browseList.Items.Remove(data);
+                    browseList.Invalidate();
+                }
+            }
+        }
+
+		public void ServiceResolved
+						(
+						DNSSDService    sref,  
+						DNSSDFlags      flags,
+						uint			ifIndex,
+                        String          fullName,
+                        String          hostName,
+                        ushort           port,
+                        TXTRecord       txtRecord
+						)
 		{
-			resolver.Dispose();
+			ResolveData data = new ResolveData();
+
+			data.InterfaceIndex = ifIndex;
+			data.FullName		= fullName;
+			data.HostName		= hostName;
+			data.Port			= port;
+			data.TxtRecord		= txtRecord;
+
+			//
+			// Don't forget to stop the resolver. This eases the burden on the network
+			//
+            resolver.Stop();
 			resolver = null;
 
 			Populate((BrowseData) browseList.SelectedItem, data);
 		}
 
-		//
-		// OnBrowseReply
-		//
-		// This call is invoked by the DNSService core.  It is
-		// executed in the context of a worker thread, not the
-		// main (GUI) thread.  We create a BrowseData object
-		// and invoked the appropriate method in the GUI thread
-		// so we can update the UI
-		//
-		private void OnBrowseReply
-								(
-								ServiceRef		sdRef,
-								ServiceFlags	flags,
-								int				interfaceIndex,
-								ErrorCode		errorCode,
-								String			name,
-								String			type,
-								String			domain
-								)
-		{
-			if (errorCode == ErrorCode.NoError)
-			{
-				BrowseData data = new BrowseData();
-
-				data.InterfaceIndex = interfaceIndex;
-				data.Name = name;
-				data.Type = type;
-				data.Domain = domain;
-	
-				if ((flags & ServiceFlags.Add) != 0)
-				{
-					Invoke(addServiceCallback, new Object[]{data});
-					
-				}
-				else if ((flags == 0) || ((flags & ServiceFlags.MoreComing) != 0))
-				{
-					Invoke(removeServiceCallback, new Object[]{data});
-				}
-			}
-			else
-			{
-				MessageBox.Show("OnBrowseReply returned an error code: " + errorCode, "Error");
-			}
-		}
-
-		private void OnResolveReply
-								(
-								ServiceRef		sdRef,  
-								ServiceFlags	flags,
-								int				interfaceIndex,
-								ErrorCode		errorCode,
-								String			fullName,
-								String			hostName,
-								int				port,
-								Byte[]			txtRecord
-								)
-		{
-			if (errorCode == ErrorCode.NoError)
-			{
-				ResolveData data = new ResolveData();
-
-				data.InterfaceIndex = interfaceIndex;
-				data.FullName		= fullName;
-				data.HostName		= hostName;
-				data.Port			= port;
-				data.TxtRecord		= txtRecord;
-	
-				Invoke(resolveServiceCallback, new Object[]{data});
-			}
-			else
-			{
-				MessageBox.Show("OnResolveReply returned an error code: " + errorCode, "Error");
-			}
-		}
-	}
+        public void OperationFailed
+                        (
+                        DNSSDService sref,
+                        DNSSDError error
+                        )
+        {
+            MessageBox.Show("Operation failed: error code: " + error, "Error");
+        }
+    }
 }

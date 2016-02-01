@@ -1,28 +1,19 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 2002-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-    
-*/
+ */
 
 /* isocode.h                                                             */
 /* ----------------------------------------------------------------------*/
@@ -98,8 +89,8 @@ unsigned char ISOCODES[] = {
 4, 6, 'd','a', 0 , 0 , 0 , 0 ,
 4, 11, 'f','i', 0 , 0 , 0 , 0 ,
 4, 18, 'k','o', 0 , 0 , 0 , 0 ,
-4, 20, 'n','o', 0 , 0 , 0 , 0 ,
-8, 20, 'n','o', 0 , 0 , 0 , 0 ,
+4, 20, 'n','b', 0 , 0 , 0 , 0 ,
+8, 20, 'n','b', 0 , 0 , 0 , 0 ,
 4, 22, 'p','t', 0 , 0 , 0 , 0 ,
 4, 29, 's','v', 0 , 0 , 0 , 0 ,
 8, 29, 's','v', 0 , 0 , 0 , 0 ,
@@ -130,7 +121,7 @@ unsigned char ISOCODES[] = {
 8, 22, 'p','t','_','P','T', 0 ,
 4, 24, 'r','o', 0 , 0 , 0 , 0 ,
 8, 24, 'r','o', 0 , 0 , 0 , 0 ,
-4, 15, 'r','u', 0 , 0 , 0 , 0 ,
+4, 25, 'r','u', 0 , 0 , 0 , 0 ,
 8, 25, 'r','u', 0 , 0 , 0 , 0 ,
 4, 30, 't','h', 0 , 0 , 0 , 0 ,
 4, 31, 't','r', 0 , 0 , 0 , 0 ,

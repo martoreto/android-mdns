@@ -4,24 +4,24 @@
 //
 #define IDS_NAME                        106
 #define IDS_WEB_SITES                   107
-#define IDS_FTP_SITES                   108
 #define IDS_PRINTERS                    109
 #define IDS_MDNSRESPONDER_NOT_AVAILABLE 110
 #define IDS_FIREWALL                    111
 #define IDD_ABOUT                       118
 #define IDR_CONTEXT_MENU                120
 #define IDD_LOGIN                       145
-#define IDC_ABOUT_BACKGROUND				146
+#define IDC_ABOUT_BACKGROUND                146
 #define IDS_ABOUT                       147
 #define IDS_ABOUT_URL                   148
 #define IDC_COMPONENT                   1001
 #define IDC_LEGAL                       1002
+#define IDC_COMPONENT_VERSION           1003
 #define IDC_LOGIN_USERNAME_TEXT         1182
 #define IDC_LOGIN_PASSWORD_TEXT         1183
 #define ID_Menu                         40001
 
 // Next default values for new objects
-// 
+//
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        119

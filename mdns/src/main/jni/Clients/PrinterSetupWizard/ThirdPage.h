@@ -1,42 +1,19 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 1997-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
- * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
- * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-    
-$Log: ThirdPage.h,v $
-Revision 1.3  2005/01/25 08:57:28  shersche
-<rdar://problem/3911084> Add m_printerControl member for dynamic loading of icons from resource DLLs
-Bug #: 3911084
-
-Revision 1.2  2004/12/29 18:53:38  shersche
-<rdar://problem/3725106>
-<rdar://problem/3737413> Added support for LPR and IPP protocols as well as support for obtaining multiple text records. Reorganized and simplified codebase.
-Bug #: 3725106, 3737413
-
-Revision 1.1  2004/06/18 04:36:58  rpantos
-First checked in
-
-
-*/
+ */
 
 #pragma once
 #include "afxcmn.h"
@@ -52,92 +29,131 @@ First checked in
 
 class CThirdPage : public CPropertyPage
 {
-	DECLARE_DYNAMIC(CThirdPage)
+DECLARE_DYNAMIC(CThirdPage)
 
 public:
-	CThirdPage();
-	virtual ~CThirdPage();
+CThirdPage();
+virtual ~CThirdPage();
 
 // Dialog Data
-	enum { IDD = IDD_THIRD_PAGE };
+enum { IDD = IDD_THIRD_PAGE };
 
 protected:
-	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
-	virtual BOOL OnSetActive();
+virtual void DoDataExchange(CDataExchange* pDX);        // DDX/DDV support
+virtual BOOL OnSetActive();
+virtual BOOL OnKillActive();
 
-	DECLARE_MESSAGE_MAP()
+DECLARE_MESSAGE_MAP()
 
 private:
 
-	typedef std::map<CString, Manufacturer*> Manufacturers;
+//
+//<rdar://problem/4189721> mDNS: Epson shows up twice in the list.  Use case insensitive compare
+//
+struct compare_func
+{
+    bool operator()( const CString & s1, const CString & s2 ) const
+    {
+        return s1.CompareNoCase( s2 ) < 0;
+    }
+};
 
-	//
-	// LoadPrintDriverDefsFromFile
-	//
-	// Parses INF file and populates manufacturers
-	//
-	OSStatus LoadPrintDriverDefsFromFile(Manufacturers & manufacturers, const CString & filename, bool checkForDuplicateModels );
-	
-	//
-	// LoadPrintDriverDefs
-	//
-	// Loads extant print driver definitions
-	//
-	OSStatus LoadPrintDriverDefs(Manufacturers & manufacturers);
+typedef std::map<CString, Manufacturer*, compare_func> Manufacturers;
 
-	//
-	// PopulateUI
-	//
-	// Load print driver defs into UI for browsing/selection
-	//
-	OSStatus PopulateUI(Manufacturers & manufacturers);
+//
+// LoadPrintDriverDefsFromFile
+//
+// Parses INF file and populates manufacturers
+//
+OSStatus LoadPrintDriverDefsFromFile(Manufacturers & manufacturers, const CString & filename, bool checkForDuplicateModels );
 
-	//
-	// MatchPrinter
-	//
-	// Tries to match printer based on manufacturer and model
-	//
-	OSStatus MatchPrinter(Manufacturers & manufacturers, Printer * printer, Service * service);
+//
+// LoadPrintDriverDefs
+//
+// Loads extant print driver definitions
+//
+OSStatus LoadPrintDriverDefs(Manufacturers & manufacturers);
 
-	//
-	// OnInitPage
-	//
-	// Called first time page is activated.
-	OSStatus OnInitPage();
+//
+// LoadGenericPrintDriversDefs
+//
+// Loads generic postscript and pcl print driver defs
+//
+OSStatus LoadGenericPrintDriverDefs( Manufacturers & manufacturers );
 
-	//
-	// these functions will tweak the names so that everything is
-	// consistent
-	//
-	CString				ConvertToManufacturerName( const CString & name );
-	CString				ConvertToModelName( const CString & name );
-	CString				NormalizeManufacturerName( const CString & name );
+//
+// PopulateUI
+//
+// Load print driver defs into UI for browsing/selection
+//
+OSStatus PopulateUI(Manufacturers & manufacturers);
 
-	Manufacturer	*	MatchManufacturer( Manufacturers & manufacturer, const CString & name );
-	Model			*	MatchModel( Manufacturer * manufacturer, const CString & name );
-	void				SelectMatch(Printer * printer, Service * service, Manufacturer * manufacturer, Model * model);
-	void				CopyPrinterSettings(Printer * printer, Service * service, Manufacturer * manufacturer, Model * model);
+//
+// MatchPrinter
+//
+// Tries to match printer based on manufacturer and model
+//
+OSStatus MatchPrinter(Manufacturers & manufacturers, Printer * printer, Service * service, bool useCUPSWorkaround);
 
-	Manufacturers		m_manufacturers;
-	
-	CListCtrl			m_manufacturerListCtrl;
-	Manufacturer	*	m_manufacturerSelected;
-	
-	CListCtrl			m_modelListCtrl;
-	Model			*	m_modelSelected;
+//
+// OnInitPage
+//
+// Called first time page is activated.
+OSStatus OnInitPage();
 
-	bool				m_initialized;
+//
+// these functions will tweak the names so that everything is
+// consistent
+//
+CString             ConvertToManufacturerName( const CString & name );
+CString             ConvertToModelName( const CString & name );
+CString             NormalizeManufacturerName( const CString & name );
+
+Manufacturer    *   MatchManufacturer( Manufacturers & manufacturer, const CString & name );
+Model           *   MatchModel( Manufacturer * manufacturer, const CString & name );
+BOOL                MatchGeneric( Manufacturers & manufacturers, Printer * printer, Service * service, Manufacturer ** manufacturer, Model ** model );
+void                SelectMatch(Printer * printer, Service * service, Manufacturer * manufacturer, Model * model);
+void                SelectMatch(Manufacturers & manufacturers, Printer * printer, Service * service, Manufacturer * manufacturer, Model * model);
+void                CopyPrinterSettings(Printer * printer, Service * service, Manufacturer * manufacturer, Model * model);
+//
+// <rdar://problem/4580061> mDNS: Printers added using Bonjour should be set as the default printer.
+//
+BOOL                DefaultPrinterExists();
+//
+//<rdar://problem/4528853> mDNS: When auto-highlighting items in lists, scroll list so highlighted item is in the middle
+//
+void                AutoScroll(CListCtrl & list, int nIndex);
+
+void                FreeManufacturers( Manufacturers & manufacturers );
+
+Manufacturers m_manufacturers;
+
+CListCtrl m_manufacturerListCtrl;
+Manufacturer    *   m_manufacturerSelected;
+
+CListCtrl m_modelListCtrl;
+Model           *   m_modelSelected;
+
+Model           *   m_genericPostscript;
+Model           *   m_genericPCL;
+
+bool m_initialized;
 
 public:
 
-	afx_msg void OnLvnItemchangedManufacturer(NMHDR *pNMHDR, LRESULT *pResult);
-	CStatic m_printerName;
-	afx_msg void OnLvnItemchangedPrinterModel(NMHDR *pNMHDR, LRESULT *pResult);
-	afx_msg void OnBnClickedDefaultPrinter();
+afx_msg void OnLvnItemchangedManufacturer(NMHDR *pNMHDR, LRESULT *pResult);
+CStatic m_printerName;
+afx_msg void OnLvnItemchangedPrinterModel(NMHDR *pNMHDR, LRESULT *pResult);
+afx_msg void OnBnClickedDefaultPrinter();
 private:
-	CButton m_defaultPrinterCtrl;
+
+void
+Split( const CString & string, TCHAR ch, CStringList & components );
+
+CButton m_defaultPrinterCtrl;
+
 public:
-	CStatic m_printerSelectionText;
-	CStatic	*	m_printerImage;
-	afx_msg void OnBnClickedHaveDisk();
+CStatic m_printerSelectionText;
+CStatic *   m_printerImage;
+afx_msg void OnBnClickedHaveDisk();
 };

@@ -78,7 +78,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-IDR_MAINFRAME           ICON                    "res\\Print.ico"
+IDR_MAINFRAME           ICON                    "res\\NetworkPrinter.ico"
 IDI_INFO                ICON                    "res\\Info.ico"
 IDI_PRINTER             ICON                    "res\\NetworkPrinter.ico"
 
@@ -120,12 +120,12 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Apple Computer, Inc."
-            VALUE "FileDescription", "Rendezvous Printer Wizard Resource Module"
+            VALUE "CompanyName", MASTER_COMPANY_NAME
+            VALUE "FileDescription", "Bonjour Resource Module"
             VALUE "FileVersion", MASTER_PROD_VERS_STR
-            VALUE "InternalName", "RendezvousPrinterWizardLocalized.dll"
+            VALUE "InternalName", "PrinterWizardLocalized.dll"
             VALUE "LegalCopyright", MASTER_LEGAL_COPYRIGHT
-            VALUE "OriginalFilename", "RendezvousPrinterWizardLocalized.dll"
+            VALUE "OriginalFilename", "PrinterWizardLocalized.dll"
             VALUE "ProductName", MASTER_PROD_NAME
             VALUE "ProductVersion", MASTER_PROD_VERS_STR
         END

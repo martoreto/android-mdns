@@ -1,41 +1,20 @@
-/*
+/* -*- Mode: Java; tab-width: 4 -*-
+ *
  * Copyright (c) 2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-
-$Log: DNSSDUnitTest.java,v $
-Revision 1.4  2004/08/04 01:07:43  rpantos
-Update unit test for <rdar://problems/3731579&3731582>.
-
-Revision 1.3  2004/05/26 01:41:58  cheshire
-Pass proper flags to DNSSD.enumerateDomains
-
-Revision 1.2  2004/04/30 21:53:34  rpantos
-Change line endings for CVS.
-
-Revision 1.1  2004/04/30 16:29:35  rpantos
-First checked in.
-
-	DNSSDUnitTest is a simple program that exercises parts of the DNSSD API.
+ *
+ * DNSSDUnitTest is a simple program that exercises parts of the DNSSD API.
  */
 
 import com.apple.dnssd.*;
@@ -107,6 +86,7 @@ class	DNSSDUnitTest
 		fRegTest = new RegTest();
 		new BrowseTest();
 		new DomainTest();
+		new RegistrarTest();
 		
 		this.waitForEnd();
 	}
@@ -323,5 +303,32 @@ class	QueryTest extends TermReporter implements QueryListener
 			System.out.println( "Query data is:" + dataTxt);
 		} catch( Exception e) { e.printStackTrace(); }
 	}
+}
+
+class	RegistrarTest extends TermReporter implements RegisterRecordListener
+{
+	public		RegistrarTest()
+	{
+		try {
+			byte[]	kResponsiblePerson = { 'g','r','o','v','e','r' };
+			fRegistrar = DNSSD.createRecordRegistrar( this);
+			fRegistrar.registerRecord( DNSSD.UNIQUE, 0,
+					"test.registrartest.local", 17 /*ns_t_rp*/, 1, kResponsiblePerson, 3600);
+		} catch( Exception e) { e.printStackTrace(); }
+	}
+
+	public void	recordRegistered( DNSRecord record, int flags)
+	{
+		String s = "RegistrarTest result flags:" + String.valueOf( flags);
+		System.out.println( s);
+
+		try {
+			byte[]	kResponsiblePerson = { 'e','l','m','o' };
+			record.update( 0, kResponsiblePerson, 3600);
+			record.remove();
+		} catch( Exception e) { e.printStackTrace(); }
+	}
+
+	protected DNSSDRecordRegistrar	fRegistrar;
 }
 

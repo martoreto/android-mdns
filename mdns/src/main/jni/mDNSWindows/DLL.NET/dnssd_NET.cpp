@@ -1,60 +1,18 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 2003-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-
-$Log: dnssd_NET.cpp,v $
-Revision 1.9  2004/09/16 18:17:13  shersche
-Use background threads, cleanup to parameter names.
-Submitted by: prepin@gmail.com
-
-Revision 1.8  2004/09/13 19:35:58  shersche
-<rdar://problem/3798941> Add Apple.DNSSD namespace to MC++ wrapper class
-<rdar://problem/3798950> Change all instances of unsigned short to int
-Bug #: 3798941, 3798950
-
-Revision 1.7  2004/09/11 00:36:40  shersche
-<rdar://problem/3786226> Modified .NET shim code to use host byte order for ports in APIs and callbacks
-Bug #: 3786226
-
-Revision 1.6  2004/09/02 21:20:56  cheshire
-<rdar://problem/3774871> Rendezvous DLL.NET crashes on null record
-
-Revision 1.5  2004/07/27 07:12:56  shersche
-make TextRecord an instantiable class object
-
-Revision 1.4  2004/07/26 06:19:05  shersche
-Treat byte arrays of zero-length as null arrays
-
-Revision 1.3  2004/07/19 16:08:56  shersche
-fix problems in UTF8/Unicode string translations
-
-Revision 1.2  2004/07/19 07:48:34  shersche
-fix bug in DNSService.Register when passing in NULL text record, add TextRecord APIs
-
-Revision 1.1  2004/06/26 04:01:22  shersche
-Initial revision
-
-
  */
     
 // This is the main DLL file.
@@ -123,7 +81,7 @@ ServiceRef::StartThread()
 
 	m_impl->SetupEvents();
 
-	m_thread		=	new Thread(new ThreadStart(this, ProcessingThread));
+	m_thread		=	new Thread(new ThreadStart(this, &Apple::DNSSD::ServiceRef::ProcessingThread));
 	m_thread->Name	=	S"DNSService Thread";
 	m_thread->IsBackground = true;
 	

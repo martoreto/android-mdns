@@ -1,38 +1,26 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 2003-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
+ */
 
-    Change History (most recent first):
-    
-$Log: Firewall.cpp,v $
-Revision 1.2  2004/09/15 09:39:53  shersche
-Retry the method INetFwPolicy::get_CurrentProfile on error
+// <rdar://problem/4278931> Doesn't compile correctly with latest Platform SDK
 
-Revision 1.1  2004/09/13 07:32:31  shersche
-Wrapper for Windows Firewall API code
+#if !defined(_WIN32_DCOM)
+#	define _WIN32_DCOM 
+#endif
 
-
-*/
-
-#define _WIN32_DCOM 
 
 #include "Firewall.h"
 #include <windows.h>
@@ -62,12 +50,12 @@ mDNSFirewallInitialize(OUT INetFwProfile ** fwProfile)
 	// call will fail on anything other than XP SP2
 
 	err = CoCreateInstance( __uuidof(NetFwMgr), NULL, CLSCTX_INPROC_SERVER, __uuidof(INetFwMgr), (void**)&fwMgr );
-	require(SUCCEEDED(err), exit);
+	require(SUCCEEDED(err) && ( fwMgr != NULL ), exit);
 
 	// Use the reference to get the local firewall policy
 
 	err = fwMgr->get_LocalPolicy(&fwPolicy);
-	require(SUCCEEDED(err), exit);
+	require(SUCCEEDED(err) && ( fwPolicy != NULL ), exit);
 
 	// Use the reference to get the extant profile. Empirical evidence
 	// suggests that there is the potential for a race condition when a system
@@ -147,16 +135,16 @@ mDNSFirewallAppIsEnabled
 	// Get the list of authorized applications
 
 	err = fwProfile->get_AuthorizedApplications(&fwApps);
-	require(SUCCEEDED(err), exit);
+	require(SUCCEEDED(err) && ( fwApps != NULL ), exit);
 
     fwBstrProcessImageFileName = SysAllocString(fwProcessImageFileName);
-	require_action(SysStringLen(fwBstrProcessImageFileName) > 0, exit, err = kNoMemoryErr);
+	require_action( ( fwProcessImageFileName != NULL ) && ( SysStringLen(fwBstrProcessImageFileName) > 0 ), exit, err = kNoMemoryErr);
 
 	// Look for us
 
     err = fwApps->Item(fwBstrProcessImageFileName, &fwApp);
 	
-    if (SUCCEEDED(err))
+    if (SUCCEEDED(err) && ( fwApp != NULL ) )
     {
         // It's listed, but is it enabled?
 
@@ -177,7 +165,10 @@ exit:
 
 	// Deallocate the BSTR
 
-    SysFreeString(fwBstrProcessImageFileName);
+	if ( fwBstrProcessImageFileName != NULL )
+	{
+		SysFreeString(fwBstrProcessImageFileName);
+	}
 
 	// Release the COM objects
 
@@ -225,15 +216,15 @@ mDNSFirewallAddApp
 		// Get the list of authorized applications
 
         err = fwProfile->get_AuthorizedApplications(&fwApps);
-		require(SUCCEEDED(err), exit);
+		require(SUCCEEDED(err) && ( fwApps != NULL ), exit);
 
         // Create an instance of an authorized application.
 
 		err = CoCreateInstance( __uuidof(NetFwAuthorizedApplication), NULL, CLSCTX_INPROC_SERVER, __uuidof(INetFwAuthorizedApplication), (void**)&fwApp );
-		require(SUCCEEDED(err), exit);
+		require(SUCCEEDED(err) && ( fwApp != NULL ), exit);
 
         fwBstrProcessImageFileName = SysAllocString(fwProcessImageFileName);
-		require_action(SysStringLen(fwBstrProcessImageFileName) > 0, exit, err = kNoMemoryErr);
+		require_action(( fwProcessImageFileName != NULL ) && ( SysStringLen(fwBstrProcessImageFileName) > 0 ), exit, err = kNoMemoryErr);
 
 		// Set the executable file name
 
@@ -241,7 +232,7 @@ mDNSFirewallAddApp
 		require(SUCCEEDED(err), exit);
 
 		fwBstrName = SysAllocString(fwName);
-		require_action(SysStringLen(fwBstrName) > 0, exit, err = kNoMemoryErr);
+		require_action( ( fwBstrName != NULL ) && ( SysStringLen(fwBstrName) > 0 ), exit, err = kNoMemoryErr);
 
 		// Set the friendly name
 
@@ -260,8 +251,15 @@ exit:
 
 	// Deallocate the BSTR objects
 
-    SysFreeString(fwBstrName);
-    SysFreeString(fwBstrProcessImageFileName);
+	if ( fwBstrName != NULL )
+	{
+		SysFreeString(fwBstrName);
+	}
+
+	if ( fwBstrProcessImageFileName != NULL )
+	{
+		SysFreeString(fwBstrProcessImageFileName);
+	}
 
     // Release the COM objects
 
@@ -276,6 +274,108 @@ exit:
     }
 
     return err;
+}
+
+
+
+
+
+static OSStatus
+
+mDNSFirewallIsFileAndPrintSharingEnabled
+
+	(
+
+	IN INetFwProfile	* fwProfile,
+
+	OUT BOOL			* fwServiceEnabled
+
+	)
+
+{
+
+    VARIANT_BOOL fwEnabled;
+
+    INetFwService* fwService = NULL;
+
+    INetFwServices* fwServices = NULL;
+
+	OSStatus err = S_OK;
+
+
+
+    _ASSERT(fwProfile != NULL);
+
+    _ASSERT(fwServiceEnabled != NULL);
+
+
+
+    *fwServiceEnabled = FALSE;
+
+
+
+    // Retrieve the globally open ports collection.
+
+    err = fwProfile->get_Services(&fwServices);
+
+	require( SUCCEEDED( err ), exit );
+
+
+
+    // Attempt to retrieve the globally open port.
+
+    err = fwServices->Item(NET_FW_SERVICE_FILE_AND_PRINT, &fwService);
+
+	require( SUCCEEDED( err ), exit );
+
+	
+
+	// Find out if the globally open port is enabled.
+
+    err = fwService->get_Enabled(&fwEnabled);
+
+	require( SUCCEEDED( err ), exit );
+
+	if (fwEnabled != VARIANT_FALSE)
+
+	{
+
+		*fwServiceEnabled = TRUE;
+
+	}
+
+
+
+exit:
+
+
+
+    // Release the globally open port.
+
+    if (fwService != NULL)
+
+    {
+
+        fwService->Release();
+
+    }
+
+
+
+    // Release the globally open ports collection.
+
+    if (fwServices != NULL)
+
+    {
+
+        fwServices->Release();
+
+    }
+
+
+
+    return err;
+
 }
 
 
@@ -306,7 +406,7 @@ mDNSAddToFirewall
 	// Connect to the firewall
 
 	err = mDNSFirewallInitialize(&fwProfile);
-	require_noerr(err, exit);
+	require( SUCCEEDED( err ) && ( fwProfile != NULL ), exit);
 
 	// Add us to the list of exempt programs
 
@@ -317,7 +417,10 @@ exit:
 
 	// Disconnect from the firewall
 
-	mDNSFirewallCleanup(fwProfile);
+	if ( fwProfile != NULL )
+	{
+		mDNSFirewallCleanup(fwProfile);
+	}
 
 	// De-initialize COM
 
@@ -327,4 +430,55 @@ exit:
     }
 
 	return err;
+}
+
+
+BOOL
+mDNSIsFileAndPrintSharingEnabled( BOOL * retry )
+{
+	INetFwProfile	*	fwProfile					= NULL;
+	HRESULT				comInit						= E_FAIL;
+	BOOL				enabled						= FALSE;
+	OSStatus			err							= kNoErr;
+
+	// Initialize COM.
+
+	*retry = FALSE;
+	comInit = CoInitializeEx( 0, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE );
+
+	// Ignore this case. RPC_E_CHANGED_MODE means that COM has already been
+	// initialized with a different mode.
+
+	if (comInit != RPC_E_CHANGED_MODE)
+	{
+		*retry = TRUE;
+		err = comInit;
+		require(SUCCEEDED(err), exit);
+	}
+
+	// Connect to the firewall
+
+	err = mDNSFirewallInitialize(&fwProfile);
+	require( SUCCEEDED( err ) && ( fwProfile != NULL ), exit);
+
+	err = mDNSFirewallIsFileAndPrintSharingEnabled( fwProfile, &enabled );
+	require_noerr( err, exit );
+
+exit:
+
+	// Disconnect from the firewall
+
+	if ( fwProfile != NULL )
+	{
+		mDNSFirewallCleanup(fwProfile);
+	}
+
+	// De-initialize COM
+
+	if (SUCCEEDED(comInit))
+    {
+        CoUninitialize();
+    }
+
+	return enabled;
 }

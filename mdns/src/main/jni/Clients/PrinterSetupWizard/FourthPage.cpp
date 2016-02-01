@@ -1,52 +1,33 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 1997-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-    
-$Log: FourthPage.cpp,v $
-Revision 1.5  2005/01/06 08:17:08  shersche
-Display the selected protocol ("Raw", "LPR", "IPP") rather than the port name
-
-Revision 1.4  2004/07/13 20:15:04  shersche
-<rdar://problem/3726363> Load large font name from resource
-Bug #: 3726363
-
-Revision 1.3  2004/07/12 06:59:03  shersche
-<rdar://problem/3723695> Use resource strings for Yes/No
-Bug #: 3723695
-
-Revision 1.2  2004/06/26 23:27:12  shersche
-support for installing multiple printers of the same name
-
-Revision 1.1  2004/06/18 04:36:57  rpantos
-First checked in
-
-
-*/
+ */
 
 #include "stdafx.h"
 #include "PrinterSetupWizardApp.h"
 #include "PrinterSetupWizardSheet.h"
 #include "FourthPage.h"
+
+#if !defined( PBS_MARQUEE )
+#	define PBS_MARQUEE  0x08
+#endif
+
+#if !defined( PBM_SETMARQUEE )
+#	define PBM_SETMARQUEE WM_USER + 10
+#endif
+
 
 
 // CFourthPage dialog
@@ -93,7 +74,23 @@ END_MESSAGE_MAP()
 OSStatus 
 CFourthPage::OnInitPage()
 {
-	return kNoErr;
+	CWnd * window; 
+	OSStatus err = kNoErr;
+
+	window = GetDlgItem( IDC_INSTALLING );
+	require_action( window, exit, err = kUnknownErr );
+	window->ShowWindow( SW_HIDE );
+
+	window = GetDlgItem( IDC_PROGRESS );
+	require_action( window, exit, err = kUnknownErr );
+	SetWindowLong( *window, GWL_STYLE, GetWindowLong( *window, GWL_STYLE ) | PBS_MARQUEE );
+	SetWindowLongPtr( *window, GWL_STYLE, GetWindowLongPtr( *window, GWL_STYLE ) | PBS_MARQUEE );
+	window->SendMessage( ( UINT ) PBM_SETMARQUEE, ( WPARAM ) FALSE,( LPARAM ) 35 );
+	window->ShowWindow( SW_HIDE );
+
+exit:
+
+	return err;
 }
 
 
@@ -126,7 +123,7 @@ CFourthPage::OnSetActive()
 
 	m_printerNameCtrl.SetWindowText( printer->actualName );
 	m_printerManufacturerCtrl.SetWindowText ( printer->manufacturer );
-	m_printerModelCtrl.SetWindowText ( printer->model );
+	m_printerModelCtrl.SetWindowText ( printer->displayModelName );
 
 	Service * service = printer->services.front();
 	require_quiet( service, exit );
@@ -146,4 +143,70 @@ CFourthPage::OnSetActive()
 exit:
 
 	return CPropertyPage::OnSetActive();
+}
+
+
+BOOL
+CFourthPage::OnKillActive()
+{
+	CPrinterSetupWizardSheet * psheet;
+
+	psheet = reinterpret_cast<CPrinterSetupWizardSheet*>(GetParent());
+	require_quiet( psheet, exit );   
+   
+	psheet->SetLastPage(this);
+
+exit:
+
+	return CPropertyPage::OnKillActive();
+}
+
+
+BOOL
+CFourthPage::StartActivityIndicator()
+{
+	CWnd * window; 
+	BOOL ok = TRUE;
+
+	window = GetDlgItem( IDC_COMPLETE1 );
+	require_action( window, exit, ok = FALSE );
+	window->ShowWindow( SW_HIDE );
+
+	window = GetDlgItem( IDC_COMPLETE2 );
+	require_action( window, exit, ok = FALSE );
+	window->ShowWindow( SW_HIDE );
+
+	window = GetDlgItem( IDC_INSTALLING );
+	require_action( window, exit, ok = FALSE );
+	window->ShowWindow( SW_SHOW );
+
+	window = GetDlgItem( IDC_PROGRESS );
+	require_action( window, exit, ok = FALSE );
+	window->SendMessage( ( UINT ) PBM_SETMARQUEE, ( WPARAM ) TRUE,( LPARAM ) 50 );
+	window->ShowWindow( SW_SHOW );
+
+exit:
+
+	return ok;
+}
+
+
+BOOL
+CFourthPage::StopActivityIndicator()
+{
+	CWnd * window; 
+	BOOL ok = TRUE;
+
+	window = GetDlgItem( IDC_INSTALLING );
+	require_action( window, exit, ok = FALSE );
+	window->ShowWindow( SW_HIDE );
+
+	window = GetDlgItem( IDC_PROGRESS );
+	require_action( window, exit, ok = FALSE );
+	window->SendMessage( ( UINT ) PBM_SETMARQUEE, ( WPARAM ) FALSE,( LPARAM ) 35 );
+	window->ShowWindow( SW_HIDE );
+
+exit:
+
+	return ok;
 }

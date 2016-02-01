@@ -1,53 +1,19 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 2003-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-    
-$Log: ExplorerPlugin.cpp,v $
-Revision 1.6  2005/01/25 17:56:45  shersche
-<rdar://problem/3911084> Load resource DLLs, get icons and bitmaps from resource DLLs
-Bug #: 3911084
-
-Revision 1.5  2004/09/15 10:33:54  shersche
-<rdar://problem/3721611> Install XP toolbar button (8 bit mask) if running on XP platform, otherwise install 1 bit mask toolbar button
-Bug #: 3721611
-
-Revision 1.4  2004/07/13 21:24:21  rpantos
-Fix for <rdar://problem/3701120>.
-
-Revision 1.3  2004/06/26 14:12:07  shersche
-Register the toolbar button
-
-Revision 1.2  2004/06/24 20:09:39  shersche
-Change text
-Submitted by: herscher
-
-Revision 1.1  2004/06/18 04:34:59  rpantos
-Move to Clients from mDNSWindows
-
-Revision 1.1  2004/01/30 03:01:56  bradley
-Explorer Plugin to browse for DNS-SD advertised Web and FTP servers from within Internet Explorer.
-
-*/
+ */
 
 #include	"StdAfx.h"
 
@@ -87,20 +53,12 @@ static char THIS_FILE[] = __FILE__;
 //	Prototypes
 //===========================================================================================================================
 
-// DLL Exports
-
-extern "C" BOOL WINAPI	DllMain( HINSTANCE inInstance, DWORD inReason, LPVOID inReserved );
-
-// MFC Support
-
-DEBUG_LOCAL OSStatus	MFCDLLProcessAttach( HINSTANCE inInstance );
-DEBUG_LOCAL void		MFCDLLProcessDetach( HINSTANCE inInstance );
-DEBUG_LOCAL void		MFCDLLThreadDetach( HINSTANCE inInstance );
-
 // Utilities
 
 DEBUG_LOCAL OSStatus	RegisterServer( HINSTANCE inInstance, CLSID inCLSID, LPCTSTR inName );
 DEBUG_LOCAL OSStatus	RegisterCOMCategory( CLSID inCLSID, CATID inCategoryID, BOOL inRegister );
+DEBUG_LOCAL OSStatus	UnregisterServer( CLSID inCLSID );
+DEBUG_LOCAL OSStatus	MyRegDeleteKey( HKEY hKeyRoot, LPTSTR lpSubKey );
 
 // Stash away pointers to our resource DLLs
 
@@ -120,6 +78,14 @@ GetLocalizedResources()
 	return g_localizedResources;
 }
 
+// This is the class GUID for an undocumented hook into IE that will allow us to register
+// and have IE notice our new ExplorerBar without rebooting.
+// {8C7461EF-2B13-11d2-BE35-3078302C2030}
+
+DEFINE_GUID(CLSID_CompCatCacheDaemon, 
+0x8C7461EF, 0x2b13, 0x11d2, 0xbe, 0x35, 0x30, 0x78, 0x30, 0x2c, 0x20, 0x30);
+
+
 #if 0
 #pragma mark == Globals ==
 #endif
@@ -128,9 +94,9 @@ GetLocalizedResources()
 //	Globals
 //===========================================================================================================================
 
-HINSTANCE		gInstance		= NULL;
-int				gDLLRefCount	= 0;
-CWinApp			gApp;
+HINSTANCE			gInstance		= NULL;
+int					gDLLRefCount	= 0;
+CExplorerPluginApp	gApp;
 
 #if 0
 #pragma mark -
@@ -138,52 +104,82 @@ CWinApp			gApp;
 #endif
 
 //===========================================================================================================================
-//	DllMain
+//	CExplorerPluginApp::CExplorerPluginApp
 //===========================================================================================================================
 
-BOOL WINAPI	DllMain( HINSTANCE inInstance, DWORD inReason, LPVOID inReserved )
+IMPLEMENT_DYNAMIC(CExplorerPluginApp, CWinApp);
+
+CExplorerPluginApp::CExplorerPluginApp()
 {
-	BOOL			ok;
-	OSStatus		err;
-	
-	DEBUG_UNUSED( inReserved );
-	
-	ok = TRUE;
-	switch( inReason )
-	{
-		case DLL_PROCESS_ATTACH:
-			gInstance = inInstance;
-			debug_initialize( kDebugOutputTypeWindowsEventLog, "DNSServices Bar", inInstance );
-			debug_set_property( kDebugPropertyTagPrintLevel, kDebugLevelTrace );
-			dlog( kDebugLevelTrace, "\nDllMain: process attach\n" );
-			
-			err = MFCDLLProcessAttach( inInstance );
-			ok = ( err == kNoErr );
-			require_noerr( err, exit );
-			break;
-		
-		case DLL_PROCESS_DETACH:
-			dlog( kDebugLevelTrace, "DllMain: process detach\n" );
-			MFCDLLProcessDetach( inInstance );
-			break;
-		
-		case DLL_THREAD_ATTACH:
-			dlog( kDebugLevelTrace, "DllMain: thread attach\n" );
-			break;
-		
-		case DLL_THREAD_DETACH:
-			dlog( kDebugLevelTrace, "DllMain: thread detach\n" );
-			MFCDLLThreadDetach( inInstance );
-			break;
-		
-		default:
-			dlog( kDebugLevelTrace, "DllMain: unknown reason code (%d)\n",inReason );
-			break;
-	}
-	
-exit:
-	return( ok );
 }
+
+
+//===========================================================================================================================
+//	CExplorerPluginApp::~CExplorerPluginApp
+//===========================================================================================================================
+
+CExplorerPluginApp::~CExplorerPluginApp()
+{
+}
+
+
+//===========================================================================================================================
+//	CExplorerPluginApp::InitInstance
+//===========================================================================================================================
+
+BOOL
+CExplorerPluginApp::InitInstance()
+{
+	wchar_t					resource[MAX_PATH];
+	OSStatus				err;
+	int						res;
+	HINSTANCE inInstance;
+
+	inInstance = AfxGetInstanceHandle();
+	gInstance = inInstance;
+
+	debug_initialize( kDebugOutputTypeWindowsEventLog, "DNSServices Bar", inInstance );
+	debug_set_property( kDebugPropertyTagPrintLevel, kDebugLevelTrace );
+	dlog( kDebugLevelTrace, "\nCCPApp::InitInstance\n" );
+
+	res = PathForResource( inInstance, L"ExplorerPluginResources.dll", resource, MAX_PATH );
+
+	err = translate_errno( res != 0, kUnknownErr, kUnknownErr );
+	require_noerr( err, exit );
+
+	g_nonLocalizedResources = LoadLibrary( resource );
+	translate_errno( g_nonLocalizedResources, GetLastError(), kUnknownErr );
+	require_noerr( err, exit );
+
+	g_nonLocalizedResourcesName = resource;
+
+	res = PathForResource( inInstance, L"ExplorerPluginLocalized.dll", resource, MAX_PATH );
+	err = translate_errno( res != 0, kUnknownErr, kUnknownErr );
+	require_noerr( err, exit );
+
+	g_localizedResources = LoadLibrary( resource );
+	translate_errno( g_localizedResources, GetLastError(), kUnknownErr );
+	require_noerr( err, exit );
+
+	AfxSetResourceHandle( g_localizedResources );
+
+exit:
+
+	return TRUE;
+}
+
+
+//===========================================================================================================================
+//	CExplorerPluginApp::ExitInstance
+//===========================================================================================================================
+
+int
+CExplorerPluginApp::ExitInstance()
+{
+	return 0;
+}
+
+
 
 //===========================================================================================================================
 //	DllCanUnloadNow
@@ -243,9 +239,10 @@ exit:
 
 STDAPI	DllRegisterServer( void )
 {
-	HRESULT		err;
-	BOOL		ok;
-	CString		s;
+	IRunnableTask * pTask = NULL;
+	HRESULT			err;
+	BOOL			ok;
+	CString			s;
 	
 	dlog( kDebugLevelTrace, "DllRegisterServer\n" );
 	
@@ -257,7 +254,16 @@ STDAPI	DllRegisterServer( void )
 	
 	err = RegisterCOMCategory( CLSID_ExplorerBar, CATID_InfoBand, TRUE );
 	require_noerr( err, exit );
-	
+
+	// <rdar://problem/4130635> Clear IE cache so it will rebuild the cache when it runs next.  This
+	// will allow us to install and not reboot
+
+	err = CoCreateInstance(CLSID_CompCatCacheDaemon, NULL, CLSCTX_INPROC, IID_IRunnableTask, (void**) &pTask);
+	require_noerr( err, exit );
+
+	pTask->Run();
+	pTask->Release();
+
 exit:
 	return( err );
 }
@@ -274,147 +280,14 @@ STDAPI	DllUnregisterServer( void )
 	
 	err = RegisterCOMCategory( CLSID_ExplorerBar, CATID_InfoBand, FALSE );
 	require_noerr( err, exit );
+
+	err = UnregisterServer( CLSID_ExplorerBar );
+	require_noerr( err, exit );
 	
 exit:
 	return( err );
 }
 
-#if 0
-#pragma mark -
-#pragma mark == MFC Support ==
-#endif
-
-//===========================================================================================================================
-//	MFCDLLProcessAttach
-//===========================================================================================================================
-
-DEBUG_LOCAL OSStatus	MFCDLLProcessAttach( HINSTANCE inInstance )
-{
-	wchar_t					resource[MAX_PATH];
-	OSStatus				err;
-	_AFX_THREAD_STATE *		threadState;
-	AFX_MODULE_STATE *		previousModuleState;
-	BOOL					ok;
-	int						res;
-	CWinApp *				app;
-	
-	app = NULL;
-	
-	// Simulate what is done in dllmodul.cpp.
-	
-	threadState = AfxGetThreadState();
-	check( threadState );
-	previousModuleState = threadState->m_pPrevModuleState;
-	
-	ok = AfxWinInit( inInstance, NULL, TEXT( "" ), 0 );
-	require_action( ok, exit, err = kUnknownErr );
-	
-	app = AfxGetApp();
-	require_action( ok, exit, err = kNotInitializedErr );
-	
-	// Before we load the resources, let's load the error string
-
-	// errorMessage.LoadString( IDS_REINSTALL );
-	// errorCaption.LoadString( IDS_REINSTALL_CAPTION );
-
-	// Load Resources
-
-	res = PathForResource( inInstance, L"ExplorerPluginResources.dll", resource, MAX_PATH );
-
-	err = translate_errno( res != 0, kUnknownErr, kUnknownErr );
-	require_noerr( err, exit );
-
-	g_nonLocalizedResources = LoadLibrary( resource );
-	translate_errno( g_nonLocalizedResources, GetLastError(), kUnknownErr );
-	require_noerr( err, exit );
-
-	g_nonLocalizedResourcesName = resource;
-
-	res = PathForResource( inInstance, L"ExplorerPluginLocalized.dll", resource, MAX_PATH );
-	err = translate_errno( res != 0, kUnknownErr, kUnknownErr );
-	require_noerr( err, exit );
-
-	g_localizedResources = LoadLibrary( resource );
-	translate_errno( g_localizedResources, GetLastError(), kUnknownErr );
-	require_noerr( err, exit );
-
-	AfxSetResourceHandle( g_localizedResources );
-
-	ok = app->InitInstance();
-	require_action( ok, exit, err = kUnknownErr );
-	
-	threadState->m_pPrevModuleState = previousModuleState;
-	threadState = NULL;
-	AfxInitLocalData( inInstance );
-	err = kNoErr;
-	
-exit:
-	if( err )
-	{
-		if( app )
-		{
-			app->ExitInstance();
-		}
-		AfxWinTerm();
-	}
-	if( threadState )
-	{
-		threadState->m_pPrevModuleState = previousModuleState;
-	}
-	return( err );
-}
-
-//===========================================================================================================================
-//	MFCDLLProcessDetach
-//===========================================================================================================================
-
-DEBUG_LOCAL void	MFCDLLProcessDetach( HINSTANCE inInstance )
-{
-	CWinApp *		app;
-
-	// Simulate what is done in dllmodul.cpp.
-	
-	app = AfxGetApp();
-	if( app )
-	{
-		app->ExitInstance();
-	}
-
-#if( DEBUG )
-	if( AfxGetModuleThreadState()->m_nTempMapLock != 0 )
-	{
-		dlog( kDebugLevelWarning, "Warning: Temp map lock count non-zero (%ld).\n", AfxGetModuleThreadState()->m_nTempMapLock );
-	}
-#endif
-	
-	AfxLockTempMaps();
-	AfxUnlockTempMaps( -1 );
-
-	// Terminate the library before destructors are called.
-	
-	AfxWinTerm();
-	AfxTermLocalData( inInstance, TRUE );
-}
-
-//===========================================================================================================================
-//	MFCDLLFinalize
-//===========================================================================================================================
-
-DEBUG_LOCAL void	MFCDLLThreadDetach( HINSTANCE inInstance )
-{
-	// Simulate what is done in dllmodul.cpp.
-	
-#if( DEBUG )
-	if( AfxGetModuleThreadState()->m_nTempMapLock != 0 )
-	{
-		dlog( kDebugLevelWarning, "Warning: Temp map lock count non-zero (%ld).\n", AfxGetModuleThreadState()->m_nTempMapLock );
-	}
-#endif
-	
-	AfxLockTempMaps();
-	AfxUnlockTempMaps( -1 );
-	AfxTermThread( inInstance );
-}
 
 #if 0
 #pragma mark -
@@ -589,4 +462,139 @@ DEBUG_LOCAL OSStatus	RegisterCOMCategory( CLSID inCLSID, CATID inCategoryID, BOO
 
 exit:
 	return( err );
+}
+
+
+//===========================================================================================================================
+//	UnregisterServer
+//===========================================================================================================================
+
+DEBUG_LOCAL OSStatus	UnregisterServer( CLSID inCLSID )
+{
+	OSStatus			err = 0;
+	LPWSTR				clsidWideString;
+	TCHAR				clsidString[ 64 ];
+	HKEY				key;
+	TCHAR				keyName[ MAX_PATH * 2 ];
+	OSVERSIONINFO		versionInfo;
+
+	// Convert the CLSID to a string based on the encoding of this code (ANSI or Unicode).
+	
+	err = StringFromIID( inCLSID, &clsidWideString );
+	require_noerr( err, exit );
+	require_action( clsidWideString, exit, err = kNoMemoryErr );
+	
+	#ifdef UNICODE
+		lstrcpyn( clsidString, clsidWideString, sizeof_array( clsidString ) );
+		CoTaskMemFree( clsidWideString );
+	#else
+		nChars = WideCharToMultiByte( CP_ACP, 0, clsidWideString, -1, clsidString, sizeof_array( clsidString ), NULL, NULL );
+		err = translate_errno( nChars > 0, (OSStatus) GetLastError(), kUnknownErr );
+		CoTaskMemFree( clsidWideString );
+		require_noerr( err, exit );
+	#endif
+
+	wsprintf( keyName, L"CLSID\\%s", clsidString );
+	MyRegDeleteKey( HKEY_CLASSES_ROOT, keyName );
+	
+	// If running on NT, de-register the extension as approved.
+	
+	versionInfo.dwOSVersionInfoSize = sizeof( versionInfo );
+	GetVersionEx( &versionInfo );
+	if( versionInfo.dwPlatformId == VER_PLATFORM_WIN32_NT )
+	{
+		lstrcpyn( keyName, TEXT( "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved" ), sizeof_array( keyName ) );
+		err = RegCreateKeyEx( HKEY_LOCAL_MACHINE, keyName, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, NULL );
+		require_noerr( err, exit );
+
+		RegDeleteValue( key, clsidString );
+
+		err = RegCloseKey( key );
+		require_noerr( err, exit );
+	}
+
+	// de-register toolbar button
+
+	lstrcpyn( keyName, TEXT( "SOFTWARE\\Microsoft\\Internet Explorer\\Extensions\\{7F9DB11C-E358-4ca6-A83D-ACC663939424}"), sizeof_array( keyName ) );
+	MyRegDeleteKey( HKEY_LOCAL_MACHINE, keyName );
+	
+exit:
+	return( err );
+}
+
+
+
+//===========================================================================================================================
+//	MyRegDeleteKey
+//===========================================================================================================================
+
+DEBUG_LOCAL OSStatus MyRegDeleteKey( HKEY hKeyRoot, LPTSTR lpSubKey )
+{
+    LPTSTR lpEnd;
+    OSStatus err;
+    DWORD dwSize;
+    TCHAR szName[MAX_PATH];
+    HKEY hKey;
+    FILETIME ftWrite;
+
+    // First, see if we can delete the key without having to recurse.
+
+    err = RegDeleteKey( hKeyRoot, lpSubKey );
+
+    if ( !err )
+	{
+		goto exit;
+	}
+
+    err = RegOpenKeyEx( hKeyRoot, lpSubKey, 0, KEY_READ, &hKey );
+	require_noerr( err, exit );
+
+    // Check for an ending slash and add one if it is missing.
+
+    lpEnd = lpSubKey + lstrlen(lpSubKey);
+
+    if ( *( lpEnd - 1 ) != TEXT( '\\' ) ) 
+    {
+        *lpEnd =  TEXT('\\');
+        lpEnd++;
+        *lpEnd =  TEXT('\0');
+    }
+
+    // Enumerate the keys
+
+    dwSize = MAX_PATH;
+    err = RegEnumKeyEx(hKey, 0, szName, &dwSize, NULL, NULL, NULL, &ftWrite);
+
+    if ( !err ) 
+    {
+        do
+		{
+            lstrcpy (lpEnd, szName);
+
+            if ( !MyRegDeleteKey( hKeyRoot, lpSubKey ) )
+			{
+                break;
+            }
+
+            dwSize = MAX_PATH;
+
+            err = RegEnumKeyEx( hKey, 0, szName, &dwSize, NULL, NULL, NULL, &ftWrite );
+
+        }
+		while ( !err );
+    }
+
+    lpEnd--;
+    *lpEnd = TEXT('\0');
+
+    RegCloseKey( hKey );
+
+    // Try again to delete the key.
+
+    err = RegDeleteKey(hKeyRoot, lpSubKey);
+	require_noerr( err, exit );
+
+exit:
+
+	return err;
 }

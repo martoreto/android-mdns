@@ -1,47 +1,19 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 1997-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
-
-    Change History (most recent first):
-    
-$Log: PrinterSetupWizardApp.cpp,v $
-Revision 1.5  2005/01/25 18:30:02  shersche
-Fix call to PathForResource() by passing in NULL as first parameter.
-
-Revision 1.4  2005/01/25 08:54:41  shersche
-<rdar://problem/3911084> Load resource DLLs at startup.
-Bug #: 3911084
-
-Revision 1.3  2004/07/13 21:24:23  rpantos
-Fix for <rdar://problem/3701120>.
-
-Revision 1.2  2004/06/24 20:12:08  shersche
-Clean up source code
-Submitted by: herscher
-
-Revision 1.1  2004/06/18 04:36:57  rpantos
-First checked in
-
-
-*/
+ */
 
 #include "stdafx.h"
 #include "PrinterSetupWizardApp.h"
@@ -52,6 +24,11 @@ First checked in
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+#ifndef HeapEnableTerminationOnCorruption
+#	define HeapEnableTerminationOnCorruption (HEAP_INFORMATION_CLASS) 1
+#endif
+
 
 // Stash away pointers to our resource DLLs
 
@@ -104,6 +81,8 @@ BOOL CPrinterSetupWizardApp::InitInstance()
 	int			res;
 	OSStatus	err = kNoErr;
 
+	HeapSetInformation( NULL, HeapEnableTerminationOnCorruption, NULL, 0 );
+
 	//
 	// initialize the debugging framework
 	//
@@ -117,7 +96,7 @@ BOOL CPrinterSetupWizardApp::InitInstance()
 
 	// Load Resources
 
-	res = PathForResource( NULL, L"RendezvousPrinterWizard.dll", resource, MAX_PATH );
+	res = PathForResource( NULL, L"PrinterWizardResources.dll", resource, MAX_PATH );
 	err = translate_errno( res != 0, kUnknownErr, kUnknownErr );
 	require_noerr( err, exit );
 
@@ -125,14 +104,14 @@ BOOL CPrinterSetupWizardApp::InitInstance()
 	translate_errno( g_nonLocalizedResources, GetLastError(), kUnknownErr );
 	require_noerr( err, exit );
 
-	res = PathForResource( NULL, L"RendezvousPrinterWizardLocalized.dll", resource, MAX_PATH );
+	res = PathForResource( NULL, L"PrinterWizardLocalized.dll", resource, MAX_PATH );
 	err = translate_errno( res != 0, kUnknownErr, kUnknownErr );
 	require_noerr( err, exit );
 
 	g_localizedResources = LoadLibrary( resource );
 	translate_errno( g_localizedResources, GetLastError(), kUnknownErr );
 	require_noerr( err, exit );
-		
+
 	AfxSetResourceHandle( g_localizedResources );
 
 	// InitCommonControls() is required on Windows XP if an application

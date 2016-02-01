@@ -1,24 +1,18 @@
-/*
+/* -*- Mode: C; tab-width: 4 -*-
+ *
  * Copyright (c) 2003-2004 Apple Computer, Inc. All rights reserved.
  *
- * @APPLE_LICENSE_HEADER_START@
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  * 
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- * @APPLE_LICENSE_HEADER_END@
 
  * 
  * NOTE:
@@ -30,41 +24,12 @@
  * (not into any common system area where it might interfere with other
  * applications using a future completed version of these APIs).
  * If you plan to do this, please be sure to inform us by sending email
- * to rendezvous@apple.com to let us know.
- * You may want to discuss what you're doing on the Rendezvous mailing
+ * to bonjour@apple.com to let us know.
+ * You may want to discuss what you're doing on the Bonjour mailing
  * list to see if others in similar positions have any suggestions for you:
  * 
- * <http://lists.apple.com/mailman/listinfo/rendezvous-dev/>
+ * <http://lists.apple.com/bonjour-dev/>
  * 
-
-    Change History (most recent first):
-
-$Log: dnssd_NET.h,v $
-Revision 1.7  2004/12/16 19:56:12  cheshire
-Update comments
-
-Revision 1.6  2004/09/20 22:47:06  cheshire
-Add cautionary comment
-
-Revision 1.5  2004/09/16 18:16:27  shersche
-Cleanup to parameter names
-Submitted by: prepin@gmail.com
-
-Revision 1.4  2004/09/13 19:35:57  shersche
-<rdar://problem/3798941> Add Apple.DNSSD namespace to MC++ wrapper class
-<rdar://problem/3798950> Change all instances of unsigned short to int
-Bug #: 3798941, 3798950
-
-Revision 1.3  2004/07/27 07:12:10  shersche
-make TextRecord an instantiable class object
-
-Revision 1.2  2004/07/19 07:48:34  shersche
-fix bug in DNSService.Register when passing in NULL text record, add TextRecord APIs
-
-Revision 1.1  2004/06/26 04:01:22  shersche
-Initial revision
-
-
  */
     
 #pragma once
