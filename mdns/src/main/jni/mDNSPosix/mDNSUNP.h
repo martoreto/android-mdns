@@ -45,11 +45,13 @@ typedef unsigned int socklen_t;
 #endif
 
 #if !defined(_SS_MAXSIZE)
+#ifndef sockaddr_storage
 #if HAVE_IPV6
 #define sockaddr_storage sockaddr_in6
 #else
 #define sockaddr_storage sockaddr
 #endif // HAVE_IPV6
+#endif
 #endif // !defined(_SS_MAXSIZE)
 
 #ifndef NOT_HAVE_SA_LEN

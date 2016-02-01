@@ -2,12 +2,11 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_BIN_PATH := $(LOCAL_PATH)/../bin
-LOCAL_CLASS_PATH := $(LOCAL_BIN_PATH)/classes
+LOCAL_CLASS_PATH := $(LOCAL_PATH)/../../../build/intermediates/classes/release
 
 LOCAL_MODULE    := jdns_sd
 
 LOCAL_C_INCLUDES := \
-	$(LOCAL_PATH) \
 	$(LOCAL_PATH)/mDNSShared \
 	$(LOCAL_PATH)/mDNSPosix \
 	$(LOCAL_PATH)/mDNSCore 
@@ -15,12 +14,14 @@ LOCAL_C_INCLUDES := \
 LOCAL_CFLAGS :=  \
 	-DMDNS_DEBUGMSGS=0 \
 	-DTARGET_OS_ANDROID \
-	-DUSES_BROADCAST_AND_MULTICAST \
+	-DmDNS_REQUEST_UNICAST_RESPONSE \
+	-DHAVE_IPV6 \
+	-DHAVE_LINUX \
 	-DNOT_HAVE_SA_LEN -DUSES_NETLINK
 
 LOCAL_LDLIBS := -L$(SYSROOT)/usr/lib -llog
 
-setup := $(shell javah -force -classpath $(LOCAL_CLASS_PATH) -o $(LOCAL_PATH)/DNSSD.java.h \
+setup := $(shell javah -force -classpath $(LOCAL_CLASS_PATH) -o $(LOCAL_PATH)/mDNSShared/Java/DNSSD.java.h \
 	com.apple.dnssd.AppleDNSSD \
 	com.apple.dnssd.AppleBrowser \
 	com.apple.dnssd.AppleResolver \

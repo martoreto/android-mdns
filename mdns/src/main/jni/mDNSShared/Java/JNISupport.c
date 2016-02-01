@@ -70,12 +70,6 @@ static DWORD    win32_if_nametoindex( const char * nameStr );
 
 //#include <syslog.h>
 
-#include "mDNSEmbeddedAPI.h" // Defines the interface to the mDNS core code
-#include "mDNSPosix.h"    // Defines the specific types needed to run mDNS on this platform
-#include "mDnsEmbedded.h"
-
-mDNSexport mDNS mDNSStorage;
-
 // convenience definition
 #ifdef __GNUC__
 #define _UNUSED __attribute__ ((unused))
@@ -153,8 +147,10 @@ JNIEXPORT jint JNICALL Java_com_apple_dnssd_AppleDNSSD_InitLibrary( JNIEnv *pEnv
         jfieldID hasAutoCField = (*pEnv)->GetStaticFieldID( pEnv, cls, "hasAutoCallbacks", "Z");
         (*pEnv)->SetStaticBooleanField( pEnv, cls, hasAutoCField, hasAutoC);
     }
+
     return kDNSServiceErr_NoError;
 }
+
 
 static const char*  SafeGetUTFChars( JNIEnv *pEnv, jstring str)
 // Wrapper for JNI GetStringUTFChars() that returns NULL for null str.

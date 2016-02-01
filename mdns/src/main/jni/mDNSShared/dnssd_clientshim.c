@@ -32,7 +32,7 @@
 #include <winsock2.h>
 #endif
 
-mDNSexport mDNS mDNSStorage;        // We need to pass the address of this storage to the lower-layer functions
+extern mDNS mDNSStorage;        // We need to pass the address of this storage to the lower-layer functions
 
 #if MDNS_BUILDINGSHAREDLIBRARY || MDNS_BUILDINGSTUBLIBRARY
 #pragma export on
@@ -272,12 +272,6 @@ DNSServiceErrorType DNSServiceRegister
     x->autorename = mDNSfalse;
     x->name = n;
     x->host = h;
-    // reset ServiceRecordSet
-    x->s.ServiceCallback = mDNSNULL;
-    x->s.ServiceContext = mDNSNULL;
-    x->s.Extras = mDNSNULL;
-    x->s.SubTypes = mDNSNULL;
-    x->s.AnonData = mDNSNULL;
 
     // Do the operation
     err = mDNS_RegisterService(&mDNSStorage, &x->s,

@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>com.apple.mDNSResponder</string>
+	<string>com.apple.mDNSResponder.reloaded</string>
 	<key>OnDemand</key>
 	<false/>
 	<key>InitGroups</key>

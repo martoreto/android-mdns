@@ -81,6 +81,8 @@ static GenLinkedList gEventSources;             // linked list of PosixEventSour
 static sigset_t gEventSignalSet;                // Signals which event loop listens for
 static sigset_t gEventSignals;                  // Signals which were received while inside loop
 
+static PosixNetworkInterface *gRecentInterfaces;
+
 // ***************************************************************************
 // Globals (for debugging)
 
@@ -182,20 +184,6 @@ mDNSexport mStatus mDNSPlatformSendUDP(const mDNS *const m, const void *const ms
         sin6->sin6_addr           = *(struct in6_addr*)&dst->ip.v6;
         sendingsocket             = thisIntf ? thisIntf->multicastSocket6 : m->p->unicastSocket6;
     }
-#endif
-
-#if (defined(USES_BROADCAST_AND_MULTICAST))
-    if (sendingsocket >= 0)
-	{
-		int so_broadcast = 1;
-		setsockopt(sendingsocket, SOL_SOCKET, SO_BROADCAST, &so_broadcast, sizeof(sendingsocket));
-		struct sockaddr_in boradcast_addr;
-		boradcast_addr.sin_family = AF_INET;
-		boradcast_addr.sin_port = dstPort.NotAnInteger;
-		boradcast_addr.sin_addr.s_addr = thisIntf->coreIntf.broadcast.ip.v4.NotAnInteger;
-		//LogInfo("mDNSPlatformSendUDP to broadcast %#a ", &thisIntf->coreIntf.broadcast);
-		sendto(sendingsocket, msg, (char*)end - (char*)msg, 0, (struct sockaddr *)&boradcast_addr, GET_SA_LEN(boradcast_addr));
-	}
 #endif
 
     if (sendingsocket >= 0)
@@ -579,6 +567,13 @@ mDNSexport mDNSu32 mDNSPlatformInterfaceIndexfromInterfaceID(mDNS *const m, mDNS
     while ((intf != NULL) && (mDNSInterfaceID) intf != id)
         intf = (PosixNetworkInterface *)(intf->coreIntf.next);
 
+    if (intf) return intf->index;
+
+    // If we didn't find the interface, check the RecentInterfaces list as well
+    intf = gRecentInterfaces;
+    while ((intf != NULL) && (mDNSInterfaceID) intf != id)
+        intf = (PosixNetworkInterface *)(intf->coreIntf.next);
+
     return intf ? intf->index : 0;
 }
 
@@ -592,7 +587,11 @@ mDNSlocal void FreePosixNetworkInterface(PosixNetworkInterface *intf)
 #if HAVE_IPV6
     if (intf->multicastSocket6 != -1) assert(close(intf->multicastSocket6) == 0);
 #endif
-    free(intf);
+
+    // Move interface to the RecentInterfaces list for a minute
+    intf->LastSeen = mDNSPlatformUTC();
+    intf->coreIntf.next = &gRecentInterfaces->coreIntf;
+    gRecentInterfaces = intf;
 }
 
 // Grab the first interface, deregister it, free it, and repeat until done.
@@ -648,6 +647,14 @@ mDNSlocal int SetupSocket(struct sockaddr *intfAddr, mDNSIPPort port, int interf
             #error This platform has no way to avoid address busy errors on multicast.
         #endif
         if (err < 0) { err = errno; perror("setsockopt - SO_REUSExxxx"); }
+
+        // Enable inbound packets on IFEF_AWDL interface.
+        // Only done for multicast sockets, since we don't expect unicast socket operations
+        // on the IFEF_AWDL interface. Operation is a no-op for other interface types.
+        #ifndef SO_RECV_ANYIF
+        #define SO_RECV_ANYIF   0x1104      /* unrestricted inbound processing */
+        #endif
+        if (setsockopt(*sktPtr, SOL_SOCKET, SO_RECV_ANYIF, &kOn, sizeof(kOn)) < 0) perror("setsockopt - SO_RECV_ANYIF");
     }
 
     // We want to receive destination addresses and interface identifiers.
@@ -836,11 +843,7 @@ mDNSlocal int SetupSocket(struct sockaddr *intfAddr, mDNSIPPort port, int interf
 
 // Creates a PosixNetworkInterface for the interface whose IP address is
 // intfAddr and whose name is intfName and registers it with mDNS core.
-#if (defined(USES_BROADCAST_AND_MULTICAST))
-mDNSlocal int SetupOneInterface(mDNS *const m, struct sockaddr *intfAddr, struct sockaddr *intfMask, struct sockaddr *intfBroadcast, const char *intfName, int intfIndex)
-#else
 mDNSlocal int SetupOneInterface(mDNS *const m, struct sockaddr *intfAddr, struct sockaddr *intfMask, const char *intfName, int intfIndex)
-#endif
 {
     int err = 0;
     PosixNetworkInterface *intf;
@@ -867,14 +870,7 @@ mDNSlocal int SetupOneInterface(mDNS *const m, struct sockaddr *intfAddr, struct
         // Set up the fields required by the mDNS core.
         SockAddrTomDNSAddr(intfAddr, &intf->coreIntf.ip, NULL);
         SockAddrTomDNSAddr(intfMask, &intf->coreIntf.mask, NULL);
-#if (defined(USES_BROADCAST_AND_MULTICAST))
-        if(intfBroadcast != NULL) {
-        	debugf("intfBroadcast is not NULL");
-        	SockAddrTomDNSAddr(intfBroadcast, &intf->coreIntf.broadcast, NULL);
-        }else{
-        	debugf("intfBroadcast is NULL");
-        }
-#endif
+
         //LogMsg("SetupOneInterface: %#a %#a",  &intf->coreIntf.ip,  &intf->coreIntf.mask);
         strncpy(intf->coreIntf.ifname, intfName, sizeof(intf->coreIntf.ifname));
         intf->coreIntf.ifname[sizeof(intf->coreIntf.ifname)-1] = 0;
@@ -910,6 +906,10 @@ mDNSlocal int SetupOneInterface(mDNS *const m, struct sockaddr *intfAddr, struct
     // If interface is a direct link, address record will be marked as kDNSRecordTypeKnownUnique
     // and skip the probe phase of the probe/announce packet sequence.
     intf->coreIntf.DirectLink = mDNSfalse;
+#ifdef DIRECTLINK_INTERFACE_NAME
+	if (strcmp(intfName, STRINGIFY(DIRECTLINK_INTERFACE_NAME)) == 0)
+		intf->coreIntf.DirectLink = mDNStrue;
+#endif
 
     // The interface is all ready to go, let's register it with the mDNS core.
     if (err == 0)
@@ -973,13 +973,9 @@ mDNSlocal int SetupInterfaceList(mDNS *const m)
                     if (firstLoopback == NULL)
                         firstLoopback = i;
                 }
-                else
+                else if (i->ifi_flags & (IFF_MULTICAST | IFF_BROADCAST))
                 {
-#if (defined(USES_BROADCAST_AND_MULTICAST))
-                    if (SetupOneInterface(m, i->ifi_addr, i->ifi_netmask, i->ifi_brdaddr, i->ifi_name, i->ifi_index) == 0)
-#else
                     if (SetupOneInterface(m, i->ifi_addr, i->ifi_netmask, i->ifi_name, i->ifi_index) == 0)
-#endif
                         if (i->ifi_addr->sa_family == AF_INET)
                             foundav4 = mDNStrue;
                 }
@@ -993,15 +989,22 @@ mDNSlocal int SetupInterfaceList(mDNS *const m)
         // In the interim, we skip loopback interface only if we found at least one v4 interface to use
         // if ((m->HostInterfaces == NULL) && (firstLoopback != NULL))
         if (!foundav4 && firstLoopback)
-#if (defined(USES_BROADCAST_AND_MULTICAST))
-            (void) SetupOneInterface(m, firstLoopback->ifi_addr, firstLoopback->ifi_netmask,  firstLoopback->ifi_brdaddr, firstLoopback->ifi_name, firstLoopback->ifi_index);
-#else
             (void) SetupOneInterface(m, firstLoopback->ifi_addr, firstLoopback->ifi_netmask, firstLoopback->ifi_name, firstLoopback->ifi_index);
-#endif
     }
 
     // Clean up.
     if (intfList != NULL) free_ifi_info(intfList);
+
+    // Clean up any interfaces that have been hanging around on the RecentInterfaces list for more than a minute
+    PosixNetworkInterface **ri = &gRecentInterfaces;
+    const mDNSs32 utc = mDNSPlatformUTC();
+    while (*ri)
+    {
+        PosixNetworkInterface *pi = *ri;
+        if (utc - pi->LastSeen < 60) ri = (PosixNetworkInterface **)&pi->coreIntf.next;
+        else { *ri = (PosixNetworkInterface *)pi->coreIntf.next; free(pi); }
+    }
+
     return err;
 }
 
@@ -1110,11 +1113,6 @@ mDNSlocal mDNSu32       ProcessRoutingNotification(int sd)
             result |= 1 << ((struct ifinfomsg*) NLMSG_DATA(pNLMsg))->ifi_index;
         else if (pNLMsg->nlmsg_type == RTM_DELADDR || pNLMsg->nlmsg_type == RTM_NEWADDR)
             result |= 1 << ((struct ifaddrmsg*) NLMSG_DATA(pNLMsg))->ifa_index;
-
-        if (pNLMsg->nlmsg_type == RTM_DELADDR || pNLMsg->nlmsg_type == RTM_NEWADDR){
-            LogMsg("address changed", result);
-        	result = 1;
-        }
 
         // Advance pNLMsg to the next message in the buffer
         if ((pNLMsg->nlmsg_flags & NLM_F_MULTI) != 0 && pNLMsg->nlmsg_type != NLMSG_DONE)
@@ -1325,9 +1323,15 @@ mDNSexport void mDNSPlatformClose(mDNS *const m)
 #endif
 }
 
+// This is used internally by InterfaceChangeCallback.
+// It's also exported so that the Standalone Responder (mDNSResponderPosix)
+// can call it in response to a SIGHUP (mainly for debugging purposes).
 mDNSexport mStatus mDNSPlatformPosixRefreshInterfaceList(mDNS *const m)
 {
     int err;
+    // This is a pretty heavyweight way to process interface changes --
+    // destroying the entire interface list and then making fresh one from scratch.
+    // We should make it like the OS X version, which leaves unchanged interfaces alone.
     ClearInterfaceList(m);
     err = SetupInterfaceList(m);
     return PosixErrorToStatus(err);
@@ -1593,10 +1597,10 @@ mDNSexport mDNSs32 mDNSPlatformGetServiceID(mDNS *const m, DNSQuestion *q)
 {
     (void) m;
     (void) q;
-    return 0;
+    return -1;
 }
 
-mDNSexport void mDNSPlatformSetDelegatePID(UDPSocket *src, const mDNSAddr *dst, DNSQuestion *q)
+mDNSexport void mDNSPlatformSetuDNSSocktOpt(UDPSocket *src, const mDNSAddr *dst, DNSQuestion *q)
 {
     (void) src;
     (void) dst;

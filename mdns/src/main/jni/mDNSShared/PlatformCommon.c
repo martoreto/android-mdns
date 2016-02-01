@@ -161,7 +161,7 @@ mDNSexport void mDNSPlatformWriteLogMsg(const char *ident, const char *buffer, m
 #ifdef TARGET_OS_ANDROID
   __android_log_print(ANDROID_LOG_DEBUG, "bonjour", "%s", buffer);
 #else
-  
+
 #if APPLE_OSX_mDNSResponder && LogTimeStamps
     extern mDNS mDNSStorage;
     extern mDNSu32 mDNSPlatformClockDivisor;
