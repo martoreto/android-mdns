@@ -4,7 +4,7 @@
 
 The Apple mDNS stack built and packaged for Android.
 
-Current version: **98.0.0**
+Current version: **576.30.4**
 
 Lead Maintainer: [Halim Qarroum](mailto:hqm.post@gmail.com)
 
