@@ -272,6 +272,7 @@ DNSServiceErrorType DNSServiceRegister
     x->autorename = mDNSfalse;
     x->name = n;
     x->host = h;
+    x->s.AnonData = NULL;
 
     // Do the operation
     err = mDNS_RegisterService(&mDNSStorage, &x->s,
