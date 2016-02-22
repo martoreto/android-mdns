@@ -670,13 +670,13 @@ mDNSlocal void AnswerAllLocalQuestionsWithLocalAuthRecord(mDNS *const m, AuthRec
     (ResourceRecordIsValidAnswer(RR) && \
      ((RR)->resrec.InterfaceID == mDNSInterface_Any || (RR)->resrec.InterfaceID == (INTID)))
 
-#define DefaultProbeCountForTypeUnique ((mDNSu8)3)
+#define DefaultProbeCountForTypeUnique ((mDNSu8)6)
 #define DefaultProbeCountForRecordType(X)      ((X) == kDNSRecordTypeUnique ? DefaultProbeCountForTypeUnique : (mDNSu8)0)
 
 // See RFC 6762: "8.3 Announcing"
 // "The Multicast DNS responder MUST send at least two unsolicited responses, one second apart."
 // Send 4, which is really 8 since we send on both IPv4 and IPv6.
-#define InitialAnnounceCount ((mDNSu8)4)
+#define InitialAnnounceCount ((mDNSu8)8)
 
 // For goodbye packets we set the count to 3, and for wakeups we set it to 18
 // (which will be up to 15 wakeup attempts over the course of 30 seconds,
@@ -3597,7 +3597,7 @@ mDNSlocal void SendQueries(mDNS *const m)
             for (ar = m->ResourceRecords; ar; ar=ar->next)
                 if (ar->SendRNow == intf->InterfaceID)
                 {
-                    mDNSBool ucast = (ar->ProbeCount >= DefaultProbeCountForTypeUnique-1) && m->CanReceiveUnicastOn5353;
+                    mDNSBool ucast = m->CanReceiveUnicastOn5353;
                     mDNSu16 ucbit = (mDNSu16)(ucast ? kDNSQClass_UnicastResponse : 0);
                     const mDNSu8 *const limit = m->omsg.data + (m->omsg.h.numQuestions ? NormalMaxDNSMessageData : AbsoluteMaxDNSMessageData);
                     // We forecast: compressed name (2) type (2) class (2) TTL (4) rdlength (2) rdata (n)

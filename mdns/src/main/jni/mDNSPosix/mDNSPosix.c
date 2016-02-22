@@ -53,6 +53,10 @@
 #include "mDNSUNP.h"
 #include "GenLinkedList.h"
 
+#ifdef TARGET_OS_ANDROID
+#include <sys/system_properties.h>
+#endif
+
 // ***************************************************************************
 // Structures
 
@@ -479,7 +483,11 @@ mDNSexport void mDNSPlatformDynDNSHostNameStatusChanged(const domainname *const 
 mDNSlocal void GetUserSpecifiedRFC1034ComputerName(domainlabel *const namelabel)
 {
     int len = 0;
+#ifdef TARGET_OS_ANDROID
+    __system_property_get("net.hostname", (char *)(&namelabel->c[1]));
+#else
     gethostname((char *)(&namelabel->c[1]), MAX_DOMAIN_LABEL);
+#endif
     while (len < MAX_DOMAIN_LABEL && namelabel->c[len+1] && namelabel->c[len+1] != '.') len++;
     namelabel->c[0] = len;
 }
@@ -1239,11 +1247,19 @@ mDNSlocal mStatus WatchForInterfaceChange(mDNS *const m)
 mDNSlocal mDNSBool mDNSPlatformInit_CanReceiveUnicast(void)
 {
     int err;
+    static const int kOn = 1;
     int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     struct sockaddr_in s5353;
     s5353.sin_family      = AF_INET;
     s5353.sin_port        = MulticastDNSPort.NotAnInteger;
     s5353.sin_addr.s_addr = 0;
+#if defined(SO_REUSEPORT)
+    err = setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &kOn, sizeof(kOn));
+#elif defined(SO_REUSEADDR)
+    err = setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &kOn, sizeof(kOn));
+#else
+#error This platform has no way to avoid address busy errors on unicast.
+#endif
     err = bind(s, (struct sockaddr *)&s5353, sizeof(s5353));
     close(s);
     if (err) debugf("No unicast UDP responses");
