@@ -9271,6 +9271,23 @@ mDNSlocal void mDNSCoreReceiveResponse(mDNS *const m,
                 {
                     CopyAnonInfoForCR(m, rr, &m->rec.r);
                 }
+                // SRV record will remain in record cache even Goodbye has been sent,
+                // when the other host has a different IP address which registered the same service name,
+                // the cached SRV record of the old host will be queried instead of the new one.
+                // So flush the SRV cache when Goodbye received.
+                if(rr && rr->resrec.rroriginalttl == 1 && rr->resrec.rrtype == kDNSType_PTR)
+                {
+                    const mDNSu32 slot = HashSlot(&rr->resrec.rdata->u.name);
+                    const CacheGroup *cg = CacheGroupForName(m, slot, DomainNameHashValue(&rr->resrec.rdata->u.name), &rr->resrec.rdata->u.name);
+                    for (rr = cg ? cg->members : mDNSNULL; rr; rr=rr->next)
+                    {
+                        if(rr->resrec.rrtype == kDNSType_SRV)
+                        {
+                            rr->resrec.rroriginalttl = 0;
+                            SetNextCacheCheckTimeForRecord(m, rr);
+                        }
+                    }
+                }
             }
         }
         mDNSCoreResetRecord(m);
