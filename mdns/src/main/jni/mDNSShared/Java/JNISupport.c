@@ -25,12 +25,8 @@
 // (Invoking callbacks automatically on a different thread sounds attractive, but while
 // the client gains by not needing to add an event source to its main event loop, it loses
 // by being forced to deal with concurrency and locking, which can be a bigger burden.)
-#ifdef TARGET_OS_ANDROID
-#define AUTO_CALLBACKS  1
-#else
 #ifndef AUTO_CALLBACKS
 #define AUTO_CALLBACKS  0
-#endif
 #endif
 
 #if !AUTO_CALLBACKS
@@ -59,6 +55,10 @@ static DWORD    win32_if_nametoindex( const char * nameStr );
 #include <sys/socket.h>
 #include <net/if.h>
 #endif // _WIN32
+
+#ifdef TARGET_OS_ANDROID
+#include "mDNSEmbedded.h"
+#endif
 
 // When compiling with "-Wshadow" set, including jni.h produces the following error:
 // /System/Library/Frameworks/JavaVM.framework/Versions/A/Headers/jni.h:609: warning: declaration of 'index' shadows a global declaration
@@ -96,15 +96,13 @@ struct  OpContext
 
 // For AUTO_CALLBACKS, we must attach the callback thread to the Java VM prior to upcall.
 #if AUTO_CALLBACKS
-#ifndef TARGET_OS_ANDROID
-JavaVM      *gJavaVM = NULL;
-#else
+#ifdef TARGET_OS_ANDROID
 JNIEnv *pLoopEnv = NULL;
 
 JNIEXPORT jint JNICALL Java_com_apple_dnssd_DNSSDEmbedded_Init( JNIEnv *pEnv, jclass cls)
 {
-	pLoopEnv = pEnv;
-	return embedded_mDNSInit();
+    pLoopEnv = pEnv;
+    return embedded_mDNSInit();
 }
 
 JNIEXPORT void JNICALL Java_com_apple_dnssd_DNSSDEmbedded_Loop( JNIEnv *pEnv, jclass cls)
@@ -114,8 +112,10 @@ JNIEXPORT void JNICALL Java_com_apple_dnssd_DNSSDEmbedded_Loop( JNIEnv *pEnv, jc
 
 JNIEXPORT void JNICALL Java_com_apple_dnssd_DNSSDEmbedded_Exit( JNIEnv *pEnv, jclass cls)
 {
-	embedded_mDNSExit();
+    embedded_mDNSExit();
 }
+#else
+JavaVM      *gJavaVM = NULL;
 #endif
 #endif
 
@@ -169,10 +169,10 @@ static void         SafeReleaseUTFChars( JNIEnv *pEnv, jstring str, const char *
 #if AUTO_CALLBACKS
 static void SetupCallbackState( JNIEnv **ppEnv)
 {
-#ifndef TARGET_OS_ANDROID
-    (*gJavaVM)->AttachCurrentThread( gJavaVM, (void**) ppEnv, NULL);
+#ifdef TARGET_OS_ANDROID
+    (*ppEnv) = pLoopEnv;
 #else
-	(*ppEnv) = pLoopEnv;
+    (*gJavaVM)->AttachCurrentThread( gJavaVM, (void**) ppEnv, NULL);
 #endif
 }
 
@@ -720,10 +720,8 @@ static void DNSSD_API   RegisterRecordReply( DNSServiceRef sdRef _UNUSED,
 {
     RecordRegistrationRef   *regEnvelope = (RecordRegistrationRef*) context;
     OpContext       *pContext = regEnvelope->Context;
-    JNIEnv *pEnv;
 
     SetupCallbackState( &pContext->Env);
-    pEnv = pContext->Env;
 
     if ( pContext->ClientObj != NULL && pContext->Callback != NULL)
     {
@@ -736,7 +734,7 @@ static void DNSSD_API   RegisterRecordReply( DNSServiceRef sdRef _UNUSED,
             ReportError( pContext->Env, pContext->ClientObj, pContext->JavaObj, errorCode);
     }
 
-    (*pEnv)->DeleteWeakGlobalRef( pEnv, regEnvelope->RecordObj);
+    (*pContext->Env)->DeleteWeakGlobalRef( pContext->Env, regEnvelope->RecordObj);
     free( regEnvelope);
 
     TeardownCallbackState();

@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4 -*-
  *
- * Copyright (c) 2004 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2004-2015 Apple Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-#include "DNSCommon.h"
 #include <stdio.h>              // Needed for fopen() etc.
 #include <unistd.h>             // Needed for close()
 #include <string.h>             // Needed for strlen() etc.
@@ -25,6 +24,7 @@
 #include <syslog.h>
 
 #include "mDNSEmbeddedAPI.h"    // Defines the interface provided to the client layer above
+#include "DNSCommon.h"
 #include "PlatformCommon.h"
 
 #ifdef TARGET_OS_ANDROID
@@ -202,11 +202,14 @@ mDNSexport void mDNSPlatformWriteLogMsg(const char *ident, const char *buffer, m
         if (ident && ident[0] && mDNSPlatformClockDivisor)
             syslog(syslog_level, "%8d.%03d: %s", (int)(t/1000), ms, buffer);
         else
-#elif APPLE_OSX_mDNSResponder
-        mDNSPlatformLogToFile(syslog_level, buffer);
-#else
-        syslog(syslog_level, "%s", buffer);
 #endif
+        {
+#if APPLE_OSX_mDNSResponder
+            mDNSPlatformLogToFile(syslog_level, buffer);
+#else
+            syslog(syslog_level, "%s", buffer);
+#endif
+        }
     }
 #endif
 }

@@ -2,11 +2,13 @@ package com.apple.dnssd;
 
 import java.util.HashSet;
 import java.util.Set;
+
 import android.util.Log;
 
 public class DNSSDEmbedded {
 
-	public static Set<Listener> listeners = new HashSet<>();
+	final static String TAG = DNSSDEmbedded.class.getSimpleName();
+	public static Set<Listener> listeners = new HashSet<Listener>();
 
 	public static void init(Listener listener) {
 		listeners.add(listener);
