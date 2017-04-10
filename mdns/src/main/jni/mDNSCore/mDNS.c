@@ -116,7 +116,10 @@ mDNSlocal mDNSu8 *GetValueForMACAddr(mDNSu8 *ptr, mDNSu8 *limit, mDNSEthAddr *et
 // RequestUnicast value set to a value one greater than the number of times you want the query
 // sent with the "request unicast response" (QU) bit set.
 #define SET_QU_IN_FIRST_QUERY   2
-#define SET_QU_IN_FIRST_FOUR_QUERIES   5
+#define SET_QU_IN_FIRST_FOUR_QUERIES   16
+
+#define QUERIES_REPEAT_TIME_APART (mDNSPlatformOneSecond * 100 / 1000)
+#define QUERIES_REPEAT_COUNT 2
 
 
 mDNSexport const char *const mDNS_DomainTypeNames[] =
@@ -3433,7 +3436,18 @@ mDNSlocal void SendQueries(mDNS *const m)
                 {
                     // Mark this question for sending on all interfaces
                     q->SendQNow = mDNSInterfaceMark;
-                    q->ThisQInterval *= QuestionIntervalStep;
+                    if(q->ThisQInterval % InitialQuestionInterval == 0)
+                    {
+                        q->PreQInterval = q->ThisQInterval;
+                        q->ThisQInterval = QUERIES_REPEAT_TIME_APART;
+                    }
+                    else if(q->ThisQInterval % QUERIES_REPEAT_TIME_APART < QUERIES_REPEAT_COUNT - 1)
+                    {
+                        q->ThisQInterval++;
+                    }
+                    else{
+                        q->ThisQInterval = q->PreQInterval * QuestionIntervalStep;
+                    }
                 }
 
                 debugf("SendQueries: %##s (%s) next interval %d seconds RequestUnicast = %d",
@@ -12264,6 +12278,9 @@ mDNSexport mStatus mDNS_StartResolveService(mDNS *const m,
     query->qSRV.AnonInfo            = mDNSNULL;
     query->qSRV.QuestionCallback    = FoundServiceInfoSRV;
     query->qSRV.QuestionContext     = query;
+#if mDNS_REQUEST_UNICAST_RESPONSE
+    query->qSRV.RequestUnicast      = 2;
+#endif //mDNS_REQUEST_UNICAST_RESPONSE
 
     query->qTXT.ThisQInterval       = -1;       // So that mDNS_StopResolveService() knows whether to cancel this question
     query->qTXT.InterfaceID         = info->InterfaceID;

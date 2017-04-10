@@ -45,11 +45,12 @@ extern "C" {
 #define QuestionIntervalStep 3
 #define QuestionIntervalStep2 (QuestionIntervalStep*QuestionIntervalStep)
 #define QuestionIntervalStep3 (QuestionIntervalStep*QuestionIntervalStep*QuestionIntervalStep)
+#define QuestionIntervalStep4 (QuestionIntervalStep*QuestionIntervalStep*QuestionIntervalStep*QuestionIntervalStep)
 #define InitialQuestionInterval ((mDNSPlatformOneSecond + QuestionIntervalStep-1) / QuestionIntervalStep)
 #define MaxQuestionInterval         (3600 * mDNSPlatformOneSecond)
 
 // just move to MaxQuestionInterval once over this threshold
-#define QuestionIntervalThreshold   (QuestionIntervalStep3 * mDNSPlatformOneSecond)
+#define QuestionIntervalThreshold   (QuestionIntervalStep4 * mDNSPlatformOneSecond)
 
 // For Unicast record registrations, we initialize the interval to 1 second. When we send any query for
 // the record registration e.g., GetZoneData, we always back off by QuestionIntervalStep

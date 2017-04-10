@@ -2008,6 +2008,7 @@ struct DNSQuestion_struct
     mDNSu32 euid;                           // Effective User Id of the client that is requesting the question
     domainname           *qnameOrig;        // Copy of the original question name if it is not fully qualified
     mDNSQuestionCallback *QuestionCallback;
+    mDNSs32 PreQInterval;                   // Record the previous value of ThisQInterval.
     void                 *QuestionContext;
 #if TARGET_OS_EMBEDDED
     uDNSMetrics metrics;                    // Data used for collecting unicast DNS query metrics.
