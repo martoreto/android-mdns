@@ -28,6 +28,9 @@
 #ifndef _MSC_VER
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <string.h>
+#include <DNSCommon.h>
+
 #else
 #include <winsock2.h>
 #endif
@@ -60,12 +63,24 @@ typedef struct
     mDNS_DirectOP_Dispose  *disposefn;
     DNSServiceRegisterReply callback;
     void                   *context;
+    char type_as_string[MAX_ESCAPED_DOMAIN_NAME];
     mDNSBool autoname;                      // Set if this name is tied to the Computer Name
     mDNSBool autorename;                    // Set if we just got a name conflict and now need to automatically pick a new name
     domainlabel name;
     domainname host;
+    uint32_t ifindex;
     ServiceRecordSet s;
 } mDNS_DirectOP_Register;
+
+#define MAX_NONSERVICE_RECORDS 64
+
+typedef struct
+{
+    mDNS_DirectOP_Dispose  *disposefn;
+    AuthRecord* records[MAX_NONSERVICE_RECORDS];
+    DNSServiceRegisterRecordReply callbacks[MAX_NONSERVICE_RECORDS];
+    void* contexts[MAX_NONSERVICE_RECORDS];
+} mDNS_DirectOP_RegisterRecord;
 
 typedef struct
 {
@@ -220,6 +235,134 @@ mDNSlocal void RegCallback(mDNS *const m, ServiceRecordSet *const sr, mStatus re
     }
 }
 
+// If there's a comma followed by another character,
+// FindFirstSubType overwrites the comma with a nul and returns the pointer to the next character.
+// Otherwise, it returns a pointer to the final nul at the end of the string
+mDNSlocal char *FindFirstSubType(char *p, char **AnonData)
+{
+    while (*p)
+    {
+        if (p[0] == '\\' && p[1])
+        {
+            p += 2;
+        }
+        else if (p[0] == ',' && p[1])
+        {
+            *p++ = 0;
+            return(p);
+        }
+        else if (p[0] == ':' && p[1])
+        {
+            *p++ = 0;
+            *AnonData = p;
+        }
+        else
+        {
+            p++;
+        }
+    }
+    return(p);
+}
+
+// If there's a comma followed by another character,
+// FindNextSubType overwrites the comma with a nul and returns the pointer to the next character.
+// If it finds an illegal unescaped dot in the subtype name, it returns mDNSNULL
+// Otherwise, it returns a pointer to the final nul at the end of the string
+mDNSlocal char *FindNextSubType(char *p)
+{
+    while (*p)
+    {
+        if (p[0] == '\\' && p[1])       // If escape character
+            p += 2;                     // ignore following character
+        else if (p[0] == ',')           // If we found a comma
+        {
+            if (p[1]) *p++ = 0;
+            return(p);
+        }
+        else if (p[0] == '.')
+            return(mDNSNULL);
+        else p++;
+    }
+    return(p);
+}
+
+// Returns -1 if illegal subtype found
+mDNSexport mDNSs32 ChopSubTypes(char *regtype, char **AnonData)
+{
+    mDNSs32 NumSubTypes = 0;
+    char *stp = FindFirstSubType(regtype, AnonData);
+    while (stp && *stp)                 // If we found a comma...
+    {
+        if (*stp == ',') return(-1);
+        NumSubTypes++;
+        stp = FindNextSubType(stp);
+    }
+    if (!stp) return(-1);
+    return(NumSubTypes);
+}
+
+mDNSexport AuthRecord *AllocateSubTypes(mDNSs32 NumSubTypes, char *p, char **AnonData)
+{
+    AuthRecord *st = mDNSNULL;
+    //
+    // "p" is pointing at the regtype e.g., _http._tcp followed by ":<AnonData>" indicated
+    // by AnonData being non-NULL which is in turn follwed by ",<SubTypes>" indicated by
+    // NumSubTypes being non-zero. We need to skip the initial regtype to get to the actual
+    // data that we want. When we come here, ChopSubTypes has null terminated like this e.g.,
+    //
+    // _http._tcp<NULL><AnonData><NULL><SubType1><NULL><SubType2><NULL> etc.
+    //
+    // 1. If we have Anonymous data and subtypes, skip the regtype (e.g., "_http._tcp")
+    //    to get the AnonData and then skip the AnonData to get to the SubType.
+    //
+    // 2. If we have only SubTypes, skip the regtype to get to the SubType data.
+    //
+    // 3. If we have only AnonData, skip the regtype to get to the AnonData.
+    //
+    // 4. If we don't have AnonData or NumStypes, it is a noop.
+    //
+    if (AnonData)
+    {
+        int len;
+
+        // Skip the regtype
+        while (*p) p++;
+        p++;
+
+        len = strlen(p) + 1;
+        *AnonData = mDNSPlatformMemAllocate(len);
+        if (!(*AnonData))
+        {
+            return (mDNSNULL);
+        }
+        mDNSPlatformMemCopy(*AnonData, p, len);
+    }
+    if (NumSubTypes)
+    {
+        mDNSs32 i;
+        st = mDNSPlatformMemAllocate(NumSubTypes * sizeof(AuthRecord));
+        if (!st) return(mDNSNULL);
+        for (i = 0; i < NumSubTypes; i++)
+        {
+            mDNS_SetupResourceRecord(&st[i], mDNSNULL, mDNSInterface_Any, kDNSQType_ANY, kStandardTTL, 0, AuthRecordAny, mDNSNULL, mDNSNULL);
+            // First time through we skip the regtype or AnonData. Subsequently, the
+            // previous subtype.
+            while (*p) p++;
+            p++;
+            if (!MakeDomainNameFromDNSNameString(&st[i].namestorage, p))
+            {
+                mDNSPlatformMemFree(st);
+                if (*AnonData)
+                    mDNSPlatformMemFree(*AnonData);
+                return(mDNSNULL);
+            }
+        }
+    }
+    // If NumSubTypes is zero and AnonData is non-NULL, we still return NULL but AnonData has been
+    // initialized. The caller knows how to handle this.
+    return(st);
+}
+
 DNSServiceErrorType DNSServiceRegister
 (
     DNSServiceRef                       *sdRef,
@@ -243,26 +386,34 @@ DNSServiceErrorType DNSServiceRegister
     mDNSIPPort port;
     unsigned int size = sizeof(RDataBody);
     AuthRecord *SubTypes = mDNSNULL;
-    mDNSu32 NumSubTypes = 0;
     mDNS_DirectOP_Register *x;
     (void)flags;            // Unused
-    (void)interfaceIndex;   // Unused
-
-    // Check parameters
-    if (!name) name = "";
-    if (!name[0]) n = mDNSStorage.nicelabel;
-    else if (!MakeDomainLabelFromLiteralString(&n, name))                              { errormsg = "Bad Instance Name"; goto badparam; }
-    if (!regtype || !*regtype || !MakeDomainNameFromDNSNameString(&t, regtype))        { errormsg = "Bad Service Type";  goto badparam; }
-    if (!MakeDomainNameFromDNSNameString(&d, (domain && *domain) ? domain : "local.")) { errormsg = "Bad Domain";        goto badparam; }
-    if (!MakeDomainNameFromDNSNameString(&h, (host   && *host  ) ? host   : ""))       { errormsg = "Bad Target Host";   goto badparam; }
-    if (!ConstructServiceName(&srv, &n, &t, &d))                                       { errormsg = "Bad Name";          goto badparam; }
-    port.NotAnInteger = notAnIntPort;
+    char *ChoppedAnonData = mDNSNULL;
+    mDNSs32 NumSubTypes;
 
     // Allocate memory, and handle failure
     if (size < txtLen)
         size = txtLen;
     x = (mDNS_DirectOP_Register *)mDNSPlatformMemAllocate(sizeof(*x) - sizeof(RDataBody) + size);
     if (!x) { err = mStatus_NoMemoryErr; errormsg = "No memory"; goto fail; }
+    mDNSPlatformStrCopy(x->type_as_string, regtype);
+
+    NumSubTypes = ChopSubTypes(x->type_as_string, &ChoppedAnonData);
+    if (NumSubTypes < 0)
+    {
+        LogMsg("ERROR: handle_regservice_request - ChopSubTypes failed %s", x->type_as_string);
+        goto badparam;
+    }
+
+    // Check parameters
+    if (!name) name = "";
+    if (!name[0]) n = mDNSStorage.nicelabel;
+    else if (!MakeDomainLabelFromLiteralString(&n, name))                              { errormsg = "Bad Instance Name"; goto badparam; }
+    if (!*x->type_as_string || !MakeDomainNameFromDNSNameString(&t, x->type_as_string)){ errormsg = "Bad Service Type";  goto badparam; }
+    if (!MakeDomainNameFromDNSNameString(&d, (domain && *domain) ? domain : "local.")) { errormsg = "Bad Domain";        goto badparam; }
+    if (!MakeDomainNameFromDNSNameString(&h, (host   && *host  ) ? host   : ""))       { errormsg = "Bad Target Host";   goto badparam; }
+    if (!ConstructServiceName(&srv, &n, &t, &d))                                       { errormsg = "Bad Name";          goto badparam; }
+    port.NotAnInteger = notAnIntPort;
 
     // Set up object
     x->disposefn = DNSServiceRegisterDispose;
@@ -272,14 +423,29 @@ DNSServiceErrorType DNSServiceRegister
     x->autorename = mDNSfalse;
     x->name = n;
     x->host = h;
-    x->s.AnonData = NULL;
+    x->s.AnonData = mDNSNULL;
+
+    // Subtypes
+
+    if (!ChoppedAnonData)
+    {
+        SubTypes = AllocateSubTypes(NumSubTypes, x->type_as_string, mDNSNULL);
+    }
+    else
+    {
+        char *AnonData = mDNSNULL;
+        SubTypes = AllocateSubTypes(NumSubTypes, x->type_as_string, &AnonData);
+        if (AnonData)
+            x->s.AnonData = (const mDNSu8 *)AnonData;
+    }
+    // TODO: fix leaking subtypes
 
     // Do the operation
     err = mDNS_RegisterService(&mDNSStorage, &x->s,
                                &x->name, &t, &d, // Name, type, domain
                                &x->host, port, // Host and port
                                txtRecord, txtLen, // TXT data, length
-                               SubTypes, NumSubTypes, // Subtypes
+                               SubTypes, (mDNSu32) NumSubTypes, // Subtypes
                                mDNSInterface_Any, // Interface ID
                                RegCallback, x, 0); // Callback, context, flags
     if (err) { mDNSPlatformMemFree(x); errormsg = "mDNS_RegisterService"; goto fail; }
@@ -291,7 +457,7 @@ DNSServiceErrorType DNSServiceRegister
 badparam:
     err = mStatus_BadParamErr;
 fail:
-    LogMsg("DNSServiceBrowse(\"%s\", \"%s\") failed: %s (%ld)", regtype, domain, errormsg, err);
+    LogMsg("DNSServiceBrowse(\"%s\", \"%s\") failed: %s (%ld)", x->type_as_string, domain, errormsg, err);
     return(err);
 }
 
@@ -314,14 +480,41 @@ DNSServiceErrorType DNSServiceAddRecord
     uint32_t ttl
 )
 {
-    (void)sdRef;        // Unused
-    (void)RecordRef;    // Unused
-    (void)flags;        // Unused
-    (void)rrtype;       // Unused
-    (void)rdlen;        // Unused
-    (void)rdata;        // Unused
-    (void)ttl;          // Unused
-    return(kDNSServiceErr_Unsupported);
+    mStatus err = mStatus_NoError;
+    const char *errormsg = "Unknown";
+    mDNS_DirectOP_Register *x = (mDNS_DirectOP_Register *) sdRef;
+
+    ServiceRecordSet *srs = &x->s;
+    mDNSu32 coreFlags = 0;  // translate to corresponding mDNSCore flag definitions
+    int size = rdlen > sizeof(RDataBody) ? rdlen : sizeof(RDataBody);
+    ExtraResourceRecord *extra = mDNSPlatformMemAllocate(sizeof(*extra) - sizeof(RDataBody) + size);
+    if (!extra) { errormsg = "No memory"; err = mStatus_NoMemoryErr; goto fail; }
+
+    mDNSPlatformMemZero(extra, sizeof(ExtraResourceRecord));  // OK if oversized rdata not zero'd
+    extra->r.resrec.rrtype = rrtype;
+    extra->r.rdatastorage.MaxRDLength = (mDNSu16) size;
+    extra->r.resrec.rdlength = rdlen;
+    mDNSPlatformMemCopy(&extra->r.rdatastorage.u.data, rdata, rdlen);
+    extra->r.resrec.InterfaceID = mDNSInterface_Any;
+
+    if (flags & kDNSServiceFlagsIncludeP2P)
+        coreFlags |= coreFlagIncludeP2P;
+    if (flags & kDNSServiceFlagsIncludeAWDL)
+        coreFlags |= coreFlagIncludeAWDL;
+
+    // Do the operation
+    err = mDNS_AddRecordToService(&mDNSStorage, srs, extra, &extra->r.rdatastorage, ttl, coreFlags);
+    if (err) { mDNSPlatformMemFree(extra); errormsg = "mDNS_AddRecordToService"; goto fail; }
+
+    *RecordRef = (DNSRecordRef)extra;
+
+    return(mStatus_NoError);
+
+badparam:
+    err = mStatus_BadParamErr;
+fail:
+    LogMsg("DNSServiceAddRecord(\"%s\", %d) failed: %s (%ld)", x->type_as_string, rrtype, errormsg, err);
+    return(err);
 }
 
 DNSServiceErrorType DNSServiceUpdateRecord
@@ -350,10 +543,28 @@ DNSServiceErrorType DNSServiceRemoveRecord
     DNSServiceFlags flags
 )
 {
-    (void)sdRef;        // Unused
-    (void)RecordRef;    // Unused
     (void)flags;        // Unused
-    return(kDNSServiceErr_Unsupported);
+
+    mStatus err = mStatus_NoError;
+    const char *errormsg = "Unknown";
+
+    mDNS_DirectOP *xb = (mDNS_DirectOP*)sdRef;
+
+    if (xb->disposefn == &DNSServiceRegisterDispose) {
+        return (kDNSServiceErr_Unsupported);
+    } else {
+        mDNS_DirectOP_RegisterRecord *x = (mDNS_DirectOP_RegisterRecord *)sdRef;
+        AuthRecord* rr = x->records[(int)RecordRef];
+        err = mDNS_Deregister(&mDNSStorage, rr);
+        if (err) { errormsg = "mDNS_Deregister"; goto fail; }
+        return(mStatus_NoError);
+    }
+
+badparam:
+    err = mStatus_BadParamErr;
+fail:
+    LogMsg("DNSServiceUnregisterRecord() failed: %s (%ld)", errormsg, err);
+    return err;
 }
 #endif
 
@@ -594,10 +805,85 @@ fail:
 // is run against this Extension, it will get a reasonable error code instead of just
 // failing to launch (Strong Link) or calling an unresolved symbol and crashing (Weak Link)
 #if !MDNS_BUILDINGSTUBLIBRARY
+
+mDNSlocal void FreeDNSRecordRegistration(mDNS_DirectOP_RegisterRecord *x)
+{
+    mDNSPlatformMemFree(x);
+}
+
+static void DNSRecordRegisterDispose(mDNS_DirectOP *op)
+{
+    mDNS_DirectOP_RegisterRecord *x = (mDNS_DirectOP_RegisterRecord*)op;
+    int i;
+
+    // If mDNS_DeregisterService() returns mStatus_NoError, that means that the service was found in the list,
+    // is sending its goodbye packet, and we'll get an mStatus_MemFree message when we can free the memory.
+    // If mDNS_DeregisterService() returns an error, it means that the service had already been removed from
+    // the list, so we should go ahead and free the memory right now
+
+    for (i = 0; i < MAX_NONSERVICE_RECORDS; i++) {
+        AuthRecord* rr = x->records[i];
+        if (!rr) continue;
+        x->records[i] = mDNSNULL;
+        rr->RecordContext = mDNSNULL;
+        if (mDNS_Deregister(&mDNSStorage, rr) != mStatus_NoError)
+            mDNSPlatformMemFree(rr);
+    }
+
+    FreeDNSRecordRegistration(x);
+}
+
 DNSServiceErrorType DNSServiceCreateConnection(DNSServiceRef *sdRef)
 {
-    (void)sdRef;    // Unused
-    return(kDNSServiceErr_Unsupported);
+    mDNS_DirectOP_RegisterRecord* x = (mDNS_DirectOP_RegisterRecord *)mDNSPlatformMemAllocate(sizeof(*x));
+    if (!x) { return mStatus_NoMemoryErr; }
+    mDNSPlatformMemZero(x, sizeof(*x));
+    x->disposefn = DNSRecordRegisterDispose;
+    *sdRef = (DNSServiceRef) x;
+    return(mStatus_NoError);
+}
+
+mDNSlocal void RegRecordCallback(mDNS *const m, AuthRecord *const rr, mStatus result)
+{
+    DNSServiceRegisterRecordReply callback = mDNSNULL;
+    void *context  = mDNSNULL;
+    mDNS_DirectOP_RegisterRecord *x = (mDNS_DirectOP_RegisterRecord*)rr->RecordContext;
+    int rrid = -1, i;
+
+    LogMsg("RegRecordCallback() called, result=%d", result);
+
+    if (x) {
+        for (i = 0; i < MAX_NONSERVICE_RECORDS; i++) {
+            if (x->records[i] == rr) {
+                rrid = i;
+                break;
+            }
+        }
+
+        if (rrid == -1) {
+            LogMsg("RegRecordCallback() failed: can't find record");
+            return;
+        }
+
+        context = x->contexts[rrid];
+        callback = x->callbacks[rrid];
+    }
+
+    if (result == mStatus_NoError)
+    {
+        if (callback)
+            callback((DNSServiceRef) x, (DNSRecordRef) rrid, 0, result, context);
+    }
+    else if (result == mStatus_NameConflict)
+    {
+        if (callback)
+            callback((DNSServiceRef) x, (DNSRecordRef) rrid, 0, result, context);
+    }
+    else if (result == mStatus_MemFree)
+    {
+        x->records[rrid] = mDNSNULL;
+        mDNSPlatformMemFree(rr);
+    }
 }
 
 DNSServiceErrorType DNSServiceRegisterRecord
@@ -617,18 +903,81 @@ DNSServiceErrorType DNSServiceRegisterRecord
 )
 {
     (void)sdRef;            // Unused
-    (void)RecordRef;        // Unused
-    (void)flags;            // Unused
-    (void)interfaceIndex;   // Unused
-    (void)fullname;         // Unused
-    (void)rrtype;           // Unused
-    (void)rrclass;          // Unused
-    (void)rdlen;            // Unused
-    (void)rdata;            // Unused
-    (void)ttl;              // Unused
-    (void)callback;         // Unused
-    (void)context;          // Unused
-    return(kDNSServiceErr_Unsupported);
+
+    mStatus err = mStatus_NoError;
+    const char *errormsg = "Unknown";
+    mDNS_DirectOP_RegisterRecord *x = (mDNS_DirectOP_RegisterRecord*)sdRef;
+    AuthRecord *rr;
+    int rrid = -1, i;
+    mDNSInterfaceID InterfaceID;
+    AuthRecType artype;
+
+    for (i = 0; i < MAX_NONSERVICE_RECORDS; i++) {
+        if (x->records[i] == NULL) {
+            rrid = i;
+            break;
+        }
+    }
+    if (rrid == -1) { err = mStatus_NoMemoryErr; errormsg = "No memory"; goto fail; }
+
+    rr = (AuthRecord *)mDNSPlatformMemAllocate(sizeof(*rr));
+    if (!rr) { err = mStatus_NoMemoryErr; errormsg = "No memory"; goto fail; }
+    x->records[rrid] = rr;
+
+    InterfaceID = mDNSPlatformInterfaceIDfromInterfaceIndex(&mDNSStorage, interfaceIndex);
+    if (InterfaceID == mDNSInterface_LocalOnly)
+        artype = AuthRecordLocalOnly;
+    else if (InterfaceID == mDNSInterface_P2P)
+        artype = AuthRecordP2P;
+    else if ((InterfaceID == mDNSInterface_Any) && (flags & kDNSServiceFlagsIncludeP2P)
+             && (flags & kDNSServiceFlagsIncludeAWDL))
+        artype = AuthRecordAnyIncludeAWDLandP2P;
+    else if ((InterfaceID == mDNSInterface_Any) && (flags & kDNSServiceFlagsIncludeP2P))
+        artype = AuthRecordAnyIncludeP2P;
+    else if ((InterfaceID == mDNSInterface_Any) && (flags & kDNSServiceFlagsIncludeAWDL))
+        artype = AuthRecordAnyIncludeAWDL;
+    else
+        artype = AuthRecordAny;
+
+    mDNS_SetupResourceRecord(rr, mDNSNULL, InterfaceID, rrtype, 0,
+                             (mDNSu8) ((flags & kDNSServiceFlagsShared) ? kDNSRecordTypeShared : kDNSRecordTypeUnique), artype, RegRecordCallback, x);
+
+    if (!MakeDomainNameFromDNSNameString(&rr->namestorage, fullname))
+    {
+        mDNSPlatformMemFree(rr);
+        LogMsg("ERROR: bad name: %s", fullname);
+        goto badparam;
+    }
+
+    if (flags & kDNSServiceFlagsAllowRemoteQuery) rr->AllowRemoteQuery = mDNStrue;
+    rr->resrec.rrclass = rrclass;
+    rr->resrec.rdlength = rdlen;
+    rr->resrec.rdata->MaxRDLength = rdlen;
+    mDNSPlatformMemCopy(rr->resrec.rdata->u.data, rdata, rdlen);
+    rr->resrec.rroriginalttl = ttl;
+    rr->resrec.namehash = DomainNameHashValue(rr->resrec.name);
+    SetNewRData(&rr->resrec, mDNSNULL, 0);  // Sets rr->rdatahash for us
+    //rr->RecordContext = x;
+    //rr->RecordCallback = RegRecordCallback;
+
+    x->callbacks[rrid] = callback;
+    x->contexts[rrid]  = context;
+
+    err = mDNS_Register(&mDNSStorage, rr);
+    if (err) { mDNSPlatformMemFree(rr); errormsg = "mDNS_Register"; goto fail; }
+
+    // Succeeded: Wrap up and return
+    *RecordRef = (DNSRecordRef) rrid;
+
+    LogMsg("DNSServiceRegisterRecord(\"%s\", %d) succeeded", fullname, rrtype);
+
+    return(mStatus_NoError);
+
+badparam:
+    err = mStatus_BadParamErr;
+fail:
+    LogMsg("DNSServiceRegisterRecord(\"%s\", %d) failed: %s (%ld)", fullname, rrtype, errormsg, err);
+    return(err);
 }
 #endif
 
