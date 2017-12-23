@@ -1068,24 +1068,24 @@ mDNSlocal void      PrintNetLinkMsg(const struct nlmsghdr *pNLMsg)
     const char *kNLMsgTypes[] = { "", "NLMSG_NOOP", "NLMSG_ERROR", "NLMSG_DONE", "NLMSG_OVERRUN" };
     const char *kNLRtMsgTypes[] = { "RTM_NEWLINK", "RTM_DELLINK", "RTM_GETLINK", "RTM_NEWADDR", "RTM_DELADDR", "RTM_GETADDR" };
 
-    printf("nlmsghdr len=%d, type=%s, flags=0x%x\n", pNLMsg->nlmsg_len,
+    debugf("nlmsghdr len=%d, type=%s, flags=0x%x\n", pNLMsg->nlmsg_len,
            pNLMsg->nlmsg_type < RTM_BASE ? kNLMsgTypes[pNLMsg->nlmsg_type] : kNLRtMsgTypes[pNLMsg->nlmsg_type - RTM_BASE],
            pNLMsg->nlmsg_flags);
 
     if (RTM_NEWLINK <= pNLMsg->nlmsg_type && pNLMsg->nlmsg_type <= RTM_GETLINK)
     {
         struct ifinfomsg    *pIfInfo = (struct ifinfomsg*) NLMSG_DATA(pNLMsg);
-        printf("ifinfomsg family=%d, type=%d, index=%d, flags=0x%x, change=0x%x\n", pIfInfo->ifi_family,
+        debugf("ifinfomsg family=%d, type=%d, index=%d, flags=0x%x, change=0x%x\n", pIfInfo->ifi_family,
                pIfInfo->ifi_type, pIfInfo->ifi_index, pIfInfo->ifi_flags, pIfInfo->ifi_change);
 
     }
     else if (RTM_NEWADDR <= pNLMsg->nlmsg_type && pNLMsg->nlmsg_type <= RTM_GETADDR)
     {
         struct ifaddrmsg    *pIfAddr = (struct ifaddrmsg*) NLMSG_DATA(pNLMsg);
-        printf("ifaddrmsg family=%d, index=%d, flags=0x%x\n", pIfAddr->ifa_family,
+        debugf("ifaddrmsg family=%d, index=%d, flags=0x%x\n", pIfAddr->ifa_family,
                pIfAddr->ifa_index, pIfAddr->ifa_flags);
     }
-    printf("\n");
+    debugf("\n");
 }
 #endif
 
