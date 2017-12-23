@@ -2,7 +2,7 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_BIN_PATH := $(LOCAL_PATH)/../bin
-LOCAL_CLASS_PATH := $(LOCAL_PATH)/../../../build/intermediates/classes/release
+LOCAL_CLASS_PATH := $(LOCAL_PATH)/../../../build/intermediates/classes/$(APP_OPTIM)
 
 LOCAL_MODULE    := jdns_sd
 
