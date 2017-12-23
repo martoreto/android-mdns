@@ -11,6 +11,7 @@ public class DNSSDEmbedded {
 	public static Set<Listener> listeners = new HashSet<Listener>();
 
 	public static void init(Listener listener) {
+		listeners.clear();
 		listeners.add(listener);
 		init();
 	}
