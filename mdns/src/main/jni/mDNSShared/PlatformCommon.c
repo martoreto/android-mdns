@@ -148,7 +148,7 @@ badf:
 mDNSexport void mDNSPlatformWriteDebugMsg(const char *msg)
 {
 #ifdef TARGET_OS_ANDROID
-    __android_log_print(ANDROID_LOG_DEBUG, "bonjour", "%s", msg);
+    __android_log_print(ANDROID_LOG_VERBOSE, "bonjour", "%s", msg);
 #else
     fprintf(stderr,"%s\n", msg);
     fflush(stderr);
@@ -159,7 +159,14 @@ mDNSexport void mDNSPlatformWriteDebugMsg(const char *msg)
 mDNSexport void mDNSPlatformWriteLogMsg(const char *ident, const char *buffer, mDNSLogLevel_t loglevel)
 {
 #ifdef TARGET_OS_ANDROID
-  __android_log_print(ANDROID_LOG_DEBUG, "bonjour", "%s", buffer);
+    switch (loglevel) {
+        case MDNS_LOG_INFO:
+        case MDNS_LOG_DEBUG:
+            __android_log_print(ANDROID_LOG_VERBOSE, "bonjour", "%s", buffer);
+            break;
+        default:
+            __android_log_print(ANDROID_LOG_DEBUG, "bonjour", "%s", buffer);
+    }
 #else
 
 #if APPLE_OSX_mDNSResponder && LogTimeStamps
