@@ -19,7 +19,6 @@ static CacheEntity gRRCache[RR_CACHE_SIZE];
 
 const char ProgramName[] = "mDNSClientPosix";
 
-int stopNow = 0;
 static int state = 0;
 
 mDNSexport int embedded_mDNSInit() {
@@ -31,14 +30,33 @@ mDNSexport int embedded_mDNSInit() {
 }
 
 mDNSexport void embedded_mDNSExit() {
-	stopNow = 1;
+	mDNS* m = &mDNSStorage;
+	mDNS_StartExit(&mDNSStorage);
 }
 
 mDNSexport void embedded_mDNSLoop() {
 	mDNS* m = &mDNSStorage;
-	stopNow = 0;
 	state = 1;
-	while (!stopNow) {
+	while (1) {
+		mDNSs32 now = mDNS_TimeNow(m);
+
+		if (m->ShutdownTime)
+		{
+			if (mDNSStorage.ResourceRecords)
+			{
+				AuthRecord *rr;
+				for (rr = mDNSStorage.ResourceRecords; rr; rr=rr->next)
+				{
+					LogInfo("Cannot exit yet; Resource Record still exists: %s", ARDisplayString(m, rr));
+					if (mDNS_LoggingEnabled) usleep(10000);     // Sleep 10ms so that we don't flood syslog with too many messages
+				}
+			}
+			if (mDNS_ExitNow(m, now))
+			{
+				break;
+			}
+		}
+
 		//LogMsg("embedded_mDNSLoop 1");
 		int nfds = 0;
 		fd_set readfds;
@@ -66,8 +84,10 @@ mDNSexport void embedded_mDNSLoop() {
 
 		if (result < 0) {
 			//verbosedebugf( "select() returned %d errno %d", result, errno);
-			if (errno != EINTR)
-				stopNow = 1;
+			if (errno != EINTR) {
+				LogMsg("Select failed: %s", strerror(errno));
+				break;
+			}
 		} else {
 			//LogMsg("mDNSPosixProcessFDSet");
 			// 5. Call mDNSPosixProcessFDSet to let the mDNSPosix layer do its work
@@ -83,6 +103,8 @@ mDNSexport void embedded_mDNSLoop() {
 		mDNSPosixRunEventLoopOnce(m, &timeout, &signals, &gotSomething);
 	}
 	state = 0;
-	mDNS_Close(&mDNSStorage);
-	//debugf("Exiting");
+
+	LogInfo("mDNS_FinalExit");
+	mDNS_FinalExit(&mDNSStorage);
+	usleep(1000);       // Little 1ms pause before exiting, so we don't lose our final syslog messages
 }
