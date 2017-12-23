@@ -336,6 +336,7 @@ JNIEXPORT jint JNICALL Java_com_apple_dnssd_AppleService_ProcessResults( JNIEnv 
     }
     return err;
 #endif // AUTO_CALLBACKS
+    return(0);
 }
 
 
