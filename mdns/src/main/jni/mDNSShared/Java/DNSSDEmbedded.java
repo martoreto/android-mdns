@@ -18,7 +18,7 @@ public class DNSSDEmbedded {
 
 	public static void init() {
 		DNSSD.getInstance();
-		new Thread() {
+		new Thread(TAG) {
 			public void run() {
 				int ret = Init();
 				if (ret != 0) {
