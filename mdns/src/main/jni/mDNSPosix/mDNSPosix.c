@@ -1232,6 +1232,8 @@ mDNSlocal void InterfaceChangeCallback(int fd, short filter, void *context)
     // configuration, more care should be paid to interfacesChanged.
     if (interfacesChanged)
         mDNSPlatformPosixRefreshInterfaceList(pChgRec->mDNS);
+    else
+        LogInfo("No interfaces changed");
 }
 
 // Register with either a Routing Socket or RtNetLink to listen for interface changes.
@@ -1316,8 +1318,10 @@ mDNSexport mStatus mDNSPlatformInit(mDNS *const m)
         // Failure to observe interface changes is non-fatal.
         if (err != mStatus_NoError)
         {
-            fprintf(stderr, "mDNS(%d) WARNING: Unable to detect interface changes (%d).\n", getpid(), err);
+            LogMsg("mDNS(%d) WARNING: Unable to detect interface changes (%d).\n", getpid(), err);
             err = mStatus_NoError;
+        } else {
+            LogInfo("mDNS(%d) NOTE: Watching for interface changes.\n", getpid());
         }
     }
 
@@ -1348,6 +1352,7 @@ mDNSexport void mDNSPlatformClose(mDNS *const m)
 mDNSexport mStatus mDNSPlatformPosixRefreshInterfaceList(mDNS *const m)
 {
     int err;
+    LogInfo("mDNS(%d) NOTE: Interfaces changed.\n", getpid());
     // This is a pretty heavyweight way to process interface changes --
     // destroying the entire interface list and then making fresh one from scratch.
     // We should make it like the OS X version, which leaves unchanged interfaces alone.
