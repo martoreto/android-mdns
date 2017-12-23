@@ -1089,14 +1089,14 @@ mDNSlocal void      PrintNetLinkMsg(const struct nlmsghdr *pNLMsg)
 }
 #endif
 
-mDNSlocal mDNSu32       ProcessRoutingNotification(int sd)
+mDNSlocal mDNSBool      ProcessRoutingNotification(int sd)
 // Read through the messages on sd and if any indicate that any interface records should
-// be torn down and rebuilt, return affected indices as a bitmask. Otherwise return 0.
+// be torn down and rebuilt. Returns mDNStrue if anything changed.
 {
     ssize_t readCount;
     char buff[4096];
     struct nlmsghdr         *pNLMsg = (struct nlmsghdr*) buff;
-    mDNSu32 result = 0;
+    mDNSBool result = mDNSfalse;
 
     // The structure here is more complex than it really ought to be because,
     // unfortunately, there's no good way to size a buffer in advance large
@@ -1132,9 +1132,9 @@ mDNSlocal mDNSu32       ProcessRoutingNotification(int sd)
 
         // Process the NetLink message
         if (pNLMsg->nlmsg_type == RTM_GETLINK || pNLMsg->nlmsg_type == RTM_NEWLINK)
-            result |= 1 << ((struct ifinfomsg*) NLMSG_DATA(pNLMsg))->ifi_index;
+            result = mDNStrue;
         else if (pNLMsg->nlmsg_type == RTM_DELADDR || pNLMsg->nlmsg_type == RTM_NEWADDR)
-            result |= 1 << ((struct ifaddrmsg*) NLMSG_DATA(pNLMsg))->ifa_index;
+            result = mDNStrue;
 
         // Advance pNLMsg to the next message in the buffer
         if ((pNLMsg->nlmsg_flags & NLM_F_MULTI) != 0 && pNLMsg->nlmsg_type != NLMSG_DONE)
@@ -1178,14 +1178,14 @@ mDNSlocal void      PrintRoutingSocketMsg(const struct ifa_msghdr *pRSMsg)
 }
 #endif
 
-mDNSlocal mDNSu32       ProcessRoutingNotification(int sd)
+mDNSlocal mDNSBool      ProcessRoutingNotification(int sd)
 // Read through the messages on sd and if any indicate that any interface records should
-// be torn down and rebuilt, return affected indices as a bitmask. Otherwise return 0.
+// be torn down and rebuilt. Returns mDNStrue if anything changed.
 {
     ssize_t readCount;
     char buff[4096];
     struct ifa_msghdr       *pRSMsg = (struct ifa_msghdr*) buff;
-    mDNSu32 result = 0;
+    mDNSBool result = mDNSfalse;
 
     readCount = read(sd, buff, sizeof buff);
     if (readCount < (ssize_t) sizeof(struct ifa_msghdr))
@@ -1199,10 +1199,7 @@ mDNSlocal mDNSu32       ProcessRoutingNotification(int sd)
     if (pRSMsg->ifam_type == RTM_NEWADDR || pRSMsg->ifam_type == RTM_DELADDR ||
         pRSMsg->ifam_type == RTM_IFINFO)
     {
-        if (pRSMsg->ifam_type == RTM_IFINFO)
-            result |= 1 << ((struct if_msghdr*) pRSMsg)->ifm_index;
-        else
-            result |= 1 << pRSMsg->ifam_index;
+        result = mDNStrue;
     }
 
     return result;
@@ -1215,7 +1212,7 @@ mDNSlocal void InterfaceChangeCallback(int fd, short filter, void *context)
 {
     IfChangeRec     *pChgRec = (IfChangeRec*) context;
     fd_set readFDs;
-    mDNSu32 changedInterfaces = 0;
+    mDNSBool interfacesChanged = mDNSfalse;
     struct timeval zeroTimeout = { 0, 0 };
 
     (void)fd; // Unused
@@ -1226,14 +1223,14 @@ mDNSlocal void InterfaceChangeCallback(int fd, short filter, void *context)
 
     do
     {
-        changedInterfaces |= ProcessRoutingNotification(pChgRec->NotifySD);
+        interfacesChanged |= ProcessRoutingNotification(pChgRec->NotifySD);
     }
     while (0 < select(pChgRec->NotifySD + 1, &readFDs, (fd_set*) NULL, (fd_set*) NULL, &zeroTimeout));
 
     // Currently we rebuild the entire interface list whenever any interface change is
     // detected. If this ever proves to be a performance issue in a multi-homed
-    // configuration, more care should be paid to changedInterfaces.
-    if (changedInterfaces)
+    // configuration, more care should be paid to interfacesChanged.
+    if (interfacesChanged)
         mDNSPlatformPosixRefreshInterfaceList(pChgRec->mDNS);
 }
 
