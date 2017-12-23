@@ -5,3 +5,6 @@
 .DS_Store
 /build
 /captures
+*.iml
+.externalNativeBuild
+/mdns/src/main/jni/mDNSShared/Java/DNSSD.java.h
