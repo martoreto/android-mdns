@@ -18,7 +18,9 @@ LOCAL_CFLAGS :=  \
 	-DHAVE_IPV6 \
 	-DHAVE_LINUX \
 	-DNOT_HAVE_SA_LEN -DUSES_NETLINK \
-	-Wno-address-of-packed-member
+	-Wno-address-of-packed-member \
+	-fstack-protector-all \
+	-UNDEBUG -O0
 
 ifeq ($(APP_OPTIM),debug)
 LOCAL_CFLAGS += -DMDNS_DEBUGMSGS=0
