@@ -848,7 +848,8 @@ mDNSlocal void RegRecordCallback(mDNS *const m, AuthRecord *const rr, mStatus re
     DNSServiceRegisterRecordReply callback = mDNSNULL;
     void *context  = mDNSNULL;
     mDNS_DirectOP_RegisterRecord *x = (mDNS_DirectOP_RegisterRecord*)rr->RecordContext;
-    int rrid = -1, i;
+    long rrid = -1;
+    int i;
 
     LogMsg("RegRecordCallback() called, result=%d", result);
 
